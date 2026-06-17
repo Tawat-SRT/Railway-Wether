@@ -958,6 +958,18 @@ def risk_color_hex(rain_mm: float | None) -> str:
     if rain_mm < 90:    return "#f59e0b"
     return "#ef4444"
 
+def css_rgba(hex_color: str, alpha: float) -> str:
+    """Convert #RRGGBB to rgba() for CSS compatibility."""
+    color = (hex_color or "#2a4060").strip().lstrip("#")
+    if len(color) != 6:
+        color = "2a4060"
+    try:
+        r, g, b = int(color[0:2], 16), int(color[2:4], 16), int(color[4:6], 16)
+    except ValueError:
+        r, g, b = 42, 64, 96
+    alpha = max(0.0, min(float(alpha), 1.0))
+    return f"rgba({r},{g},{b},{alpha:.2f})"
+
 def water_risk_class(fill_pct: float | None, overflow: bool = False) -> tuple[str,str,str]:
     """Returns (label, css_class, color)"""
     if overflow:             return "น้ำล้นตลิ่ง 🚨","flood-risk critical","#ef4444"
@@ -1086,10 +1098,11 @@ with st.sidebar:
     st.markdown("---")
     # Line legend
     for ln, ld in SRT_LINES.items():
+        _line_shadow = css_rgba(ld["color"], 0.32)
         st.markdown(f"""
         <div style='display:flex;align-items:center;gap:8px;margin:4px 0;'>
             <div style='width:24px;height:3px;border-radius:2px;background:{ld["color"]};
-                box-shadow:0 0 6px {ld["color"]}50;'></div>
+                box-shadow:0 0 6px {_line_shadow};'></div>
             <span style='color:#4a6070;font-size:0.74rem;'>{ld["icon"]} {ln[:12]}</span>
         </div>
         """, unsafe_allow_html=True)
@@ -1331,7 +1344,8 @@ with tab_exec:
             ("☀️ ปกติ",       _n_ok,       "#10b981"),
         ]
         for lbl, cnt, col in levels:
-            pct = cnt / total * 100
+            pct = min(max(cnt / total * 100, 0), 100)
+            col_shadow = css_rgba(col, 0.38)
             st.markdown(f"""
             <div style='margin:8px 0;'>
                 <div style='display:flex;justify-content:space-between;margin-bottom:4px;'>
@@ -1342,7 +1356,7 @@ with tab_exec:
                 </div>
                 <div class='prog-wrap'>
                     <div class='prog-fill' style='width:{pct:.1f}%;background:{col};
-                        box-shadow: 0 0 6px {col}60;'></div>
+                        box-shadow: 0 0 6px {col_shadow};'></div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -1355,16 +1369,19 @@ with tab_exec:
             ov_color, ov_label = "#3b82f6", "ℹ️ เฝ้าระวัง"
         else:
             ov_color, ov_label = "#10b981", "✅ สภาวะปกติ"
+        ov_border = css_rgba(ov_color, 0.25)
+        ov_box_shadow = css_rgba(ov_color, 0.08)
+        ov_text_shadow = css_rgba(ov_color, 0.32)
 
         st.markdown(f"""
         <div style='margin-top:14px;background:rgba(0,0,0,0.4);
-            border:1px solid {ov_color}40;border-radius:10px;
+            border:1px solid {ov_border};border-radius:10px;
             padding:12px 16px;text-align:center;
-            box-shadow:0 0 20px {ov_color}15;'>
+            box-shadow:0 0 20px {ov_box_shadow};'>
             <div style='color:#3a5570;font-size:0.68rem;font-weight:700;
                 text-transform:uppercase;letter-spacing:1px;'>ภาพรวมความเสี่ยง</div>
             <div style='color:{ov_color};font-size:1.25rem;font-weight:800;
-                margin-top:4px;text-shadow:0 0 12px {ov_color}50;'>{ov_label}</div>
+                margin-top:4px;text-shadow:0 0 12px {ov_text_shadow};'>{ov_label}</div>
         </div>
 
         <!-- Water summary -->
@@ -1414,8 +1431,10 @@ with tab_exec:
             _vals = _ld["vals"]
             _avg  = round(sum(_vals)/len(_vals), 1) if _vals else None
             _mx   = round(max(_vals), 1) if _vals else None
-            _bar_w = (_mx / _max_bar * 100) if _mx else 0
+            _bar_w = min(max((_mx / _max_bar * 100) if _mx else 0, 0), 100)
             _bar_col = risk_color_hex(_mx)
+            _bar_col_fade = css_rgba(_bar_col, 0.55)
+            _bar_col_shadow = css_rgba(_bar_col, 0.32)
             st.markdown(f"""
             <div style='margin:7px 0;'>
                 <div style='display:flex;justify-content:space-between;align-items:center;
@@ -1432,8 +1451,8 @@ with tab_exec:
                 </div>
                 <div class='prog-wrap'>
                     <div class='prog-fill'
-                        style='width:{_bar_w:.1f}%;background:linear-gradient(90deg,{_bar_col},{_bar_col}aa);
-                        box-shadow: 0 0 5px {_bar_col}50;'></div>
+                        style='width:{_bar_w:.1f}%;background:linear-gradient(90deg,{_bar_col},{_bar_col_fade});
+                        box-shadow: 0 0 5px {_bar_col_shadow};'></div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -1475,6 +1494,7 @@ with tab_exec:
                 _rain = _s["rain_mm"]
                 if _rain is None: continue
                 _rc = risk_color_hex(_rain)
+                _rc_shadow = css_rgba(_rc, 0.32)
                 _lbl, _em, _, _ = risk_class(_rain)
                 _has_water = _s["river_data"] is not None
                 _wl_overflow = _s["river_data"]["overflow"] if _has_water else False
@@ -1498,7 +1518,7 @@ with tab_exec:
                     </div>
                     <div style='text-align:right;flex-shrink:0;'>
                         <div style='color:{_rc};font-size:1.05rem;font-weight:800;
-                            text-shadow:0 0 8px {_rc}50;'>{_rain:.0f}</div>
+                            text-shadow:0 0 8px {_rc_shadow};'>{_rain:.0f}</div>
                         <div style='color:#2a4060;font-size:0.65rem;'>mm</div>
                     </div>
                 </div>
@@ -1584,6 +1604,7 @@ with tab_water:
                 _ov = _wl["overflow"]
                 _wlabel, _wcls, _wcol = water_risk_class(_fp, _ov)
                 _bar_w = min(_fp or 0, 100)
+                _wcol_shadow = css_rgba(_wcol, 0.32)
 
                 st.markdown(f"""
                 <div class='river-row'>
@@ -1597,7 +1618,7 @@ with tab_water:
                     <div class='river-bar'>
                         <div class='prog-wrap'>
                             <div class='prog-fill' style='width:{_bar_w:.0f}%;background:{_wcol};
-                                box-shadow:0 0 5px {_wcol}50;'></div>
+                                box-shadow:0 0 5px {_wcol_shadow};'></div>
                         </div>
                         <div style='color:#2a4060;font-size:0.65rem;margin-top:2px;'>
                             {f"ตลิ่ง: {_bk:.1f} ม." if _bk else "ไม่มีข้อมูลตลิ่ง"}
@@ -1645,6 +1666,7 @@ with tab_water:
             for _dm in sorted(_dam_list, key=lambda x: x["storage_pct"] or 0, reverse=True)[:10]:
                 _pct = _dm["storage_pct"]
                 _dcol = dam_status_color(_pct)
+                _dcol_fade = css_rgba(_dcol, 0.55)
                 _dlab = ("น้อย" if _pct and _pct < 30 else
                          "เต็ม/วิกฤต" if _pct and _pct >= 90 else
                          "มาก" if _pct and _pct >= 70 else "ปกติ")
@@ -1660,7 +1682,7 @@ with tab_water:
                     </div>
                     <div class='prog-wrap' style='height:8px;'>
                         <div class='prog-fill' style='width:{min(_pct or 0,100):.0f}%;
-                            background:linear-gradient(90deg,{_dcol}aa,{_dcol});'></div>
+                            background:linear-gradient(90deg,{_dcol_fade},{_dcol});'></div>
                     </div>
                     {f"<div style='display:flex;justify-content:space-between;margin-top:3px;'><span style='color:#2a4060;font-size:0.67rem;'>↗ ไหลเข้า: {_dm['inflow']:.0f} ลบ.ม./วิ</span><span style='color:#2a4060;font-size:0.67rem;'>↘ ระบาย: {_dm['outflow']:.0f}</span></div>" if _dm.get("inflow") and _dm.get("outflow") else ""}
                 </div>
@@ -2259,13 +2281,15 @@ with tab_seismic:
                            "#f59e0b" if _mf >= 3.5 else "#3b82f6")
                 _impact = ("⚠️ อาจมีผลต่อโครงสร้าง" if _mf >= 5.0 else
                            "ติดตามอย่างใกล้ชิด"     if _mf >= 3.5 else "ผลกระทบน้อย")
+                _mag_label = f"{_mag:.1f}" if _mag else "?"
+                _mcolor_shadow = css_rgba(_mcolor, 0.32)
 
                 st.markdown(f"""
                 <div class='alert-card {_ec}'>
                     <div style='display:flex;justify-content:space-between;align-items:start;'>
                         <div style='flex:1;'>
                             <div class='alert-card-title'>
-                                🌋 M {_mag:.1f if _mag else "?"} — {_loc[:50]}
+                                🌋 M {_mag_label} — {_loc[:50]}
                             </div>
                             <div class='alert-card-body'>
                                 {f"🕐 {_edt[:19]}" if _edt else ""}
@@ -2276,8 +2300,8 @@ with tab_seismic:
                         </div>
                         <div style='text-align:right;min-width:55px;'>
                             <div style='color:{_mcolor};font-size:1.5rem;font-weight:900;
-                                text-shadow:0 0 12px {_mcolor}50;'>
-                                {f"{_mag:.1f}" if _mag else "?"}
+                                text-shadow:0 0 12px {_mcolor_shadow};'>
+                                {_mag_label}
                             </div>
                             <div style='color:#2a4060;font-size:0.68rem;'>ริกเตอร์</div>
                         </div>
