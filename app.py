@@ -1693,6 +1693,11 @@ with tab_water:
         ]
         for _fz in _flood_zones:
             _rc_map = {"warning":"warning","watch":"watch","critical":"critical","normal":"normal"}
+            _risk_label = {
+                "warning": "⚠️ เฝ้าระวัง",
+                "watch": "👁 ติดตาม",
+                "critical": "🚨 อันตราย",
+            }.get(_fz["risk"], "✅ ปกติ")
             st.markdown(f"""
             <div style='display:flex;align-items:center;justify-content:space-between;
                 margin:5px 0;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.03);'>
@@ -1703,8 +1708,7 @@ with tab_water:
                     <div style='color:#2a4060;font-size:0.68rem;'>{_fz["note"]}</div>
                 </div>
                 <span class='flood-risk {_rc_map.get(_fz["risk"],"normal")}'>
-                    {{"warning":"⚠️ เฝ้าระวัง","watch":"👁 ติดตาม","critical":"🚨 อันตราย"}
-                     .get(_fz["risk"],"✅ ปกติ")}
+                    {_risk_label}
                 </span>
             </div>
             """, unsafe_allow_html=True)
