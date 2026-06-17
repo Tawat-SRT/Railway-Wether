@@ -24,7 +24,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        "Get Help": "[data.tmd.go.th](https://data.tmd.go.th/api/index1.php)",
+        "Get Help": "https://data.tmd.go.th/api/index1.php",
         "About": "ระบบแจ้งเตือนสภาพอากาศและน้ำท่วมโครงข่ายรถไฟไทย v3.0",
     },
 )
@@ -36,7 +36,7 @@ TZ_TH = pytz.timezone("Asia/Bangkok")
 # ══════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-@import url('[fonts.googleapis.com](https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&family=Inter:wght@400;600;700;800&display=swap)');
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&family=Inter:wght@400;600;700;800&display=swap');
 
 html, body, [class*="css"], * {
     font-family: 'Sarabun', 'Inter', 'Segoe UI', sans-serif !important;
@@ -668,8 +668,8 @@ RIVER_STATIONS_NEAR_RAIL = [
 
 # ── 1. TMD (กรมอุตุนิยมวิทยา) ────────────────────────────
 _TMD_BASES = [
-    "[data.tmd.go.th](https://data.tmd.go.th/api)",
-    "[data.tmd.go.th](http://data.tmd.go.th/api)",
+    "https://data.tmd.go.th/api",
+    "http://data.tmd.go.th/api",
 ]
 
 def _tmd_fetch(endpoint: str, uid: str, ukey: str, extra: dict | None = None) -> dict | None:
@@ -720,9 +720,9 @@ def _tmd_fetch(endpoint: str, uid: str, ukey: str, extra: dict | None = None) ->
 
 
 # ── 2. Water Resources (สทนช. / กรมทรัพยากรน้ำ) ──────────
-# คลังข้อมูลน้ำแห่งชาติ: [app.thaiwater.net](https://app.thaiwater.net/api)
-_THAIWATER_BASE = "[app.thaiwater.net](https://app.thaiwater.net/api/v1/thaiwater)"
-_WRM_BASE       = "[api-v3.thaiwater.net](https://api-v3.thaiwater.net/api/v1)"  # Water Resource Management
+# คลังข้อมูลน้ำแห่งชาติ: https://app.thaiwater.net/api
+_THAIWATER_BASE = "https://app.thaiwater.net/api/v1/thaiwater"
+_WRM_BASE       = "https://api-v3.thaiwater.net/api/v1"  # Water Resource Management
 
 def _thaiwater_fetch(endpoint: str, params: dict | None = None) -> dict | None:
     """คลังข้อมูลน้ำแห่งชาติ — ไม่ต้องการ API key สำหรับบางจุด"""
@@ -751,7 +751,7 @@ def _wrm_fetch(endpoint: str, params: dict | None = None) -> dict | None:
 
 def _dwr_fetch(endpoint: str, params: dict | None = None) -> dict | None:
     """กรมทรัพยากรน้ำ (DWR) — Open Data"""
-    base = "[water.dwr.go.th](https://water.dwr.go.th/api)"
+    base = "https://water.dwr.go.th/api"
     try:
         r = requests.get(f"{base}/{endpoint}", params=params or {}, timeout=12,
                          headers={"Accept": "application/json"})
@@ -1767,7 +1767,7 @@ with tab_map:
 
         _m = folium.Map(location=[13.5, 101.5], zoom_start=6, tiles=None)
         folium.TileLayer(
-            tiles="[{s}.basemaps.cartocdn.com](https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png)",
+            tiles="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
             attr="© OpenStreetMap © CARTO", name="Dark", max_zoom=19,
         ).add_to(_m)
 
