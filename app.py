@@ -259,7 +259,8 @@ iframe[title="st.dataframe"] { background: transparent !important; }
 # ══════════════════════════════════════════════════════════════
 #  CONSTANTS & TOKEN SETUP
 # ══════════════════════════════════════════════════════════════
-TMD_BASE = "http://data.tmd.go.th/api"
+#  TOKEN — loaded once into session_state; survives reruns
+# ══════════════════════════════════════════════════════════════
 
 def _decode_jwt_payload(token: str) -> dict:
     try:
@@ -269,20 +270,32 @@ def _decode_jwt_payload(token: str) -> dict:
     except Exception:
         return {}
 
-# Load token
-try:
-    _raw_token = st.secrets.get("TMD_TOKEN", "") or st.secrets.get("tmd_token", "")
-except Exception:
-    _raw_token = ""
+def _set_token(raw: str) -> None:
+    """Store token + derived fields in session_state."""
+    d = _decode_jwt_payload(raw)
+    st.session_state["_tmd_token"]    = raw
+    st.session_state["_tmd_uid"]      = str(d.get("sub", ""))
+    st.session_state["_tmd_jwt_data"] = d
 
-if not _raw_token:
-    import os
-    _raw_token = os.environ.get("TMD_TOKEN", "")
+# First-run initialisation
+if "_tmd_token" not in st.session_state:
+    _boot = ""
+    # 1. Streamlit secrets (Streamlit Cloud / local .streamlit/secrets.toml)
+    try:
+        _secrets = dict(st.secrets)
+        _boot = (_secrets.get("TMD_TOKEN") or _secrets.get("tmd_token") or "")
+    except Exception:
+        pass
+    # 2. Environment variable
+    if not _boot:
+        import os
+        _boot = os.environ.get("TMD_TOKEN", "")
+    _set_token(_boot)
 
-TMD_TOKEN: str = _raw_token
-_jwt_data = _decode_jwt_payload(TMD_TOKEN)
-TMD_UID   = str(_jwt_data.get("sub", ""))
-TMD_UKEY  = TMD_TOKEN
+# Convenience read-only references (safe to read after the block above)
+def _uid()   -> str:  return st.session_state.get("_tmd_uid", "")
+def _ukey()  -> str:  return st.session_state.get("_tmd_token", "")
+def _jwt()   -> dict: return st.session_state.get("_tmd_jwt_data", {})
 
 # ══════════════════════════════════════════════════════════════
 #  SRT RAILWAY NETWORK DATA  (การรถไฟแห่งประเทศไทย)
@@ -379,57 +392,90 @@ for _line, _ldata in SRT_LINES.items():
                                   "line_short": _ldata["short"], "line_icon": _ldata["icon"]})
 
 # ══════════════════════════════════════════════════════════════
-#  API HELPERS — robust fetch with retry & timeout
+#  API HELPERS
+#  • uid + ukey passed as explicit args → cache keyed correctly
+#  • tries HTTPS first, falls back to HTTP
+#  • captures last error into session_state["_tmd_last_error"]
 # ══════════════════════════════════════════════════════════════
-_SESSION = requests.Session()
-_SESSION.headers.update({"Accept": "application/json", "Connection": "close"})
+_TMD_BASES = [
+    "https://data.tmd.go.th/api",   # HTTPS — try first
+    "http://data.tmd.go.th/api",    # HTTP  — fallback
+]
 
-def _tmd_fetch(endpoint: str, extra: dict | None = None, retries: int = 2) -> dict | None:
-    """GET a TMD API endpoint; return parsed JSON or None."""
-    if not TMD_UID or not TMD_UKEY:
+def _tmd_fetch(endpoint: str, uid: str, ukey: str, extra: dict | None = None) -> dict | None:
+    """Fetch one TMD endpoint; returns parsed JSON or None."""
+    if not uid or not ukey:
+        st.session_state["_tmd_last_error"] = "Token ไม่ถูกต้อง — uid หรือ ukey ว่าง"
         return None
-    params = {"uid": TMD_UID, "ukey": TMD_UKEY, "format": "json"}
+
+    params = {"uid": uid, "ukey": ukey, "format": "json"}
     if extra:
         params.update(extra)
-    url = f"{TMD_BASE}/{endpoint}"
-    for attempt in range(retries):
-        try:
-            r = _SESSION.get(url, params=params, timeout=12, allow_redirects=True)
-            if r.status_code == 200:
-                data = r.json()
-                # TMD wraps some errors as 200
-                if isinstance(data, dict):
-                    err = data.get("error") or data.get("Error") or data.get("STATUS")
-                    if err and str(err).lower() not in ("0", "ok", "success", ""):
-                        return None
-                return data
-        except requests.exceptions.Timeout:
-            if attempt < retries - 1:
-                time.sleep(1)
-        except Exception:
-            break
+
+    errors = []
+    for base in _TMD_BASES:
+        url = f"{base}/{endpoint}"
+        for attempt in range(2):
+            try:
+                r = requests.get(
+                    url, params=params, timeout=12,
+                    allow_redirects=True,
+                    headers={"Accept": "application/json"},
+                )
+                if r.status_code == 200:
+                    try:
+                        data = r.json()
+                    except Exception:
+                        errors.append(f"{base}: HTTP 200 แต่ไม่ใช่ JSON — {r.text[:80]}")
+                        break
+                    if isinstance(data, dict):
+                        api_err = (data.get("error") or data.get("Error") or
+                                   data.get("STATUS") or data.get("status") or "")
+                        if api_err and str(api_err).lower() not in ("0","ok","success","none","","null"):
+                            errors.append(f"{base}: API error='{api_err}'")
+                            break
+                    st.session_state["_tmd_last_error"] = ""
+                    return data
+                elif r.status_code in (401, 403):
+                    errors.append(f"{base}: HTTP {r.status_code} — Token ไม่ถูกต้องหรือ IP ถูกบล็อก")
+                    break   # no point retrying auth errors
+                else:
+                    errors.append(f"{base}: HTTP {r.status_code}")
+            except requests.exceptions.Timeout:
+                errors.append(f"{base}: Timeout (attempt {attempt+1})")
+                if attempt < 1:
+                    time.sleep(0.8)
+            except requests.exceptions.ConnectionError as ce:
+                errors.append(f"{base}: ConnectionError — {str(ce)[:80]}")
+                break
+            except Exception as e:
+                errors.append(f"{base}: {type(e).__name__}: {str(e)[:80]}")
+                break
+
+    st.session_state["_tmd_last_error"] = " | ".join(errors)
     return None
 
 
+# ── Cached wrappers — uid+ukey are explicit args so cache key is correct ──
 @st.cache_data(ttl=900, show_spinner=False)
-def get_weather_today() -> dict | None:
-    return _tmd_fetch("WeatherToday/V2/")
+def get_weather_today(uid: str, ukey: str) -> dict | None:
+    return _tmd_fetch("WeatherToday/V2/", uid, ukey)
 
 @st.cache_data(ttl=900, show_spinner=False)
-def get_weather_3h() -> dict | None:
-    return _tmd_fetch("Weather3Hours/V2/")
+def get_weather_3h(uid: str, ukey: str) -> dict | None:
+    return _tmd_fetch("Weather3Hours/V2/", uid, ukey)
 
 @st.cache_data(ttl=1800, show_spinner=False)
-def get_warning() -> dict | None:
-    return _tmd_fetch("WeatherWarningNews/V1/")
+def get_warning(uid: str, ukey: str) -> dict | None:
+    return _tmd_fetch("WeatherWarningNews/V1/", uid, ukey)
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_forecast_region() -> dict | None:
-    return _tmd_fetch("WeatherForecast7DaysByRegion/V1/")
+def get_forecast_region(uid: str, ukey: str) -> dict | None:
+    return _tmd_fetch("WeatherForecast7DaysByRegion/V1/", uid, ukey)
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_seismic() -> dict | None:
-    return _tmd_fetch("DailySeismicEvent/V1/")
+def get_seismic(uid: str, ukey: str) -> dict | None:
+    return _tmd_fetch("DailySeismicEvent/V1/", uid, ukey)
 
 # ── Utility: find nearest TMD station ────────────────────────
 def haversine(lat1, lon1, lat2, lon2) -> float:
@@ -530,29 +576,44 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     # API Token status
-    if TMD_TOKEN:
-        exp_ts = _jwt_data.get("exp", 0)
-        exp_dt = datetime.fromtimestamp(exp_ts, tz=TZ_TH) if exp_ts else None
-        days_left = (exp_dt - datetime.now(TZ_TH)).days if exp_dt else 0
-        status_color = "#10b981" if days_left > 30 else "#f59e0b" if days_left > 0 else "#ef4444"
+    _cur_uid   = _uid()
+    _cur_token = _ukey()
+    _cur_jwt   = _jwt()
+
+    if _cur_token:
+        exp_ts   = _cur_jwt.get("exp", 0)
+        exp_dt   = datetime.fromtimestamp(exp_ts, tz=TZ_TH) if exp_ts else None
+        days_left= (exp_dt - datetime.now(TZ_TH)).days if exp_dt else 0
+        st_color = "#10b981" if days_left > 30 else "#f59e0b" if days_left > 0 else "#ef4444"
         st.markdown(f"""
-        <div style='background:rgba(10,20,35,0.8);border:1px solid rgba(91,200,255,0.15);border-radius:8px;padding:10px 14px;margin-bottom:12px;'>
+        <div style='background:rgba(10,20,35,0.8);border:1px solid rgba(91,200,255,0.15);
+            border-radius:8px;padding:10px 14px;margin-bottom:12px;'>
             <div style='color:#4a7090;font-size:0.72rem;'>🔑 API Token</div>
-            <div style='color:#5bc8ff;font-size:0.82rem;font-weight:600;'>uid: <b style="color:#fff;">{TMD_UID}</b></div>
-            <div style='color:{status_color};font-size:0.75rem;margin-top:2px;'>
-                {'✅ ใช้งานได้' if days_left > 0 else '❌ หมดอายุแล้ว'} · {'หมดใน ' + str(days_left) + ' วัน' if days_left > 0 else ''}
+            <div style='color:#5bc8ff;font-size:0.82rem;font-weight:600;'>
+                uid: <b style="color:#fff;">{_cur_uid}</b>
+            </div>
+            <div style='color:{st_color};font-size:0.75rem;margin-top:2px;'>
+                {"✅ ใช้งานได้" if days_left > 0 else "❌ หมดอายุแล้ว"}
+                {" · หมดใน " + str(days_left) + " วัน" if days_left > 0 else ""}
             </div>
         </div>
         """, unsafe_allow_html=True)
     else:
-        token_in = st.text_input("🔑 TMD API Token", type="password",
-                                  placeholder="eyJ0eXAiOiJKV1Qi...",
-                                  help="ใส่ JWT token จาก data.tmd.go.th")
-        if token_in:
-            TMD_TOKEN = TMD_UKEY = token_in
-            _d = _decode_jwt_payload(token_in)
-            TMD_UID = str(_d.get("sub", ""))
-            st.success(f"✅ uid={TMD_UID}")
+        st.markdown("<div style='color:#ef4444;font-size:0.78rem;margin-bottom:6px;'>⚠️ ยังไม่ได้ใส่ Token</div>",
+                    unsafe_allow_html=True)
+        token_in = st.text_input(
+            "🔑 TMD API Token", type="password",
+            placeholder="eyJ0eXAiOiJKV1Qi...",
+            help="ใส่ JWT token จาก data.tmd.go.th/api/index1.php",
+            key="token_input_field",
+        )
+        if st.button("✅ ยืนยัน Token", use_container_width=True, key="btn_set_token"):
+            if token_in.strip():
+                _set_token(token_in.strip())
+                st.cache_data.clear()   # ล้าง cache ที่อาจ cache None ไว้ก่อนหน้า
+                st.rerun()
+            else:
+                st.error("กรุณาใส่ Token ก่อน")
 
     st.markdown("---")
 
@@ -601,14 +662,17 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════
-#  LOAD DATA
+#  LOAD DATA  — pass uid+ukey so cache key is token-specific
 # ══════════════════════════════════════════════════════════════
+_cur_uid   = _uid()
+_cur_ukey  = _ukey()
+
 with st.spinner("⏳ กำลังโหลดข้อมูลสภาพอากาศ..."):
-    _obs_today  = get_weather_today()
-    _obs_3h     = get_weather_3h()
-    _warning    = get_warning()
-    _forecast   = get_forecast_region()
-    _seismic    = get_seismic()
+    _obs_today  = get_weather_today(_cur_uid, _cur_ukey)
+    _obs_3h     = get_weather_3h(_cur_uid, _cur_ukey)
+    _warning    = get_warning(_cur_uid, _cur_ukey)
+    _forecast   = get_forecast_region(_cur_uid, _cur_ukey)
+    _seismic    = get_seismic(_cur_uid, _cur_ukey)
 
 _obs_list = extract_stations_list(_obs_today) or extract_stations_list(_obs_3h)
 _api_ok   = bool(_obs_list)
