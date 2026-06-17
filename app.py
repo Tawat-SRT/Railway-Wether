@@ -162,9 +162,27 @@ except Exception:
     import os
     TMD_TOKEN = os.environ.get("TMD_TOKEN", "")
 
-TMD_BASE = "https://data.tmd.go.th/nwpapi/v1"
-# Legacy v1 endpoints
-TMD_LEGACY = "http://data.tmd.go.th/api"
+# TMD API base URL — must use http:// (TMD legacy API does not support HTTPS)
+TMD_BASE = "http://data.tmd.go.th/api"
+
+# Extract uid (sub) from JWT payload — TMD requires uid=<sub> & ukey=<full_jwt>
+def _parse_uid(token: str) -> str:
+    """Decode JWT sub field without a library (base64url decode payload section)."""
+    import base64, json as _json
+    try:
+        parts = token.split(".")
+        if len(parts) < 2:
+            return ""
+        payload = parts[1]
+        # pad to multiple of 4
+        payload += "=" * (-len(payload) % 4)
+        decoded = base64.urlsafe_b64decode(payload)
+        return str(_json.loads(decoded).get("sub", ""))
+    except Exception:
+        return ""
+
+TMD_UID  = _parse_uid(TMD_TOKEN)   # e.g. "5439"
+TMD_UKEY = TMD_TOKEN               # full JWT string
 
 # ─────────────────────────────────────────────────────────
 #  RAILWAY STATIONS ALONG NETWORK (mapped from KMZ centroids)
@@ -229,93 +247,56 @@ for s in ALL_STATIONS:
 
 # ─────────────────────────────────────────────────────────
 #  TMD API HELPERS
+#  Authentication: uid=<sub from JWT>  &  ukey=<full JWT token>
+#  Base URL: http://data.tmd.go.th/api  (http, NOT https)
 # ─────────────────────────────────────────────────────────
-@st.cache_data(ttl=1800, show_spinner=False)
-def fetch_weather_warning():
-    """ดึงข่าวเตือนภัยสภาพอากาศจาก TMD"""
-    headers = {"Authorization": f"Bearer {TMD_TOKEN}"}
+
+def _tmd_params(extra: dict = None) -> dict:
+    """Build standard TMD query params (uid + ukey + format)."""
+    p = {"uid": TMD_UID, "ukey": TMD_UKEY, "format": "json"}
+    if extra:
+        p.update(extra)
+    return p
+
+
+def _tmd_get(endpoint: str, extra_params: dict = None, timeout: int = 15):
+    """GET a TMD endpoint; return parsed JSON or None."""
+    url = f"{TMD_BASE}/{endpoint}"
     try:
-        r = requests.get(
-            f"{TMD_BASE}/forecast/location",
-            headers=headers, timeout=10,
-            params={"lat": 13.736717, "lon": 100.523186, "fields": "tc,rain,rh,pressure,temp,cond"}
-        )
+        r = requests.get(url, params=_tmd_params(extra_params), timeout=timeout)
         if r.status_code == 200:
-            return r.json()
-    except Exception:
-        pass
-    # Fallback: legacy warning endpoint
-    try:
-        r = requests.get(
-            f"{TMD_LEGACY}/WeatherWarningNews/V1/",
-            params={"uid": TMD_TOKEN, "ukey": TMD_TOKEN, "format": "json"},
-            timeout=10,
-        )
-        if r.status_code == 200:
-            return r.json()
+            data = r.json()
+            # TMD sometimes wraps errors in a 200 response
+            if isinstance(data, dict) and data.get("error"):
+                return None
+            return data
     except Exception:
         pass
     return None
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_weather_warning():
+    """ดึงข่าวเตือนภัยสภาพอากาศ — WeatherWarningNews/V1"""
+    return _tmd_get("WeatherWarningNews/V1/")
 
 
 @st.cache_data(ttl=900, show_spinner=False)
 def fetch_weather_today():
-    """ดึงสภาพอากาศวันนี้ทุกสถานี"""
-    headers = {"Authorization": f"Bearer {TMD_TOKEN}"}
-    try:
-        r = requests.get(
-            f"{TMD_BASE}/observations/surface",
-            headers=headers, timeout=15
-        )
-        if r.status_code == 200:
-            return r.json()
-    except Exception:
-        pass
-    # Fallback: legacy
-    try:
-        r = requests.get(
-            f"{TMD_LEGACY}/WeatherToday/V2/",
-            params={"uid": TMD_TOKEN, "ukey": TMD_TOKEN, "format": "json"},
-            timeout=15,
-        )
-        if r.status_code == 200:
-            return r.json()
-    except Exception:
-        pass
-    return None
+    """ดึงสภาพอากาศรายวัน 07:00 — WeatherToday/V2"""
+    return _tmd_get("WeatherToday/V2/")
 
 
 @st.cache_data(ttl=900, show_spinner=False)
 def fetch_weather_3h():
-    """ดึงสภาพอากาศราย 3 ชม."""
-    headers = {"Authorization": f"Bearer {TMD_TOKEN}"}
-    try:
-        r = requests.get(
-            f"{TMD_LEGACY}/Weather3Hours/V2/",
-            params={"uid": TMD_TOKEN, "ukey": TMD_TOKEN, "format": "json"},
-            timeout=15,
-        )
-        if r.status_code == 200:
-            return r.json()
-    except Exception:
-        pass
-    return None
+    """ดึงสภาพอากาศราย 3 ชม. — Weather3Hours/V2"""
+    return _tmd_get("Weather3Hours/V2/")
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_forecast_7days():
-    """ดึงพยากรณ์อากาศ 7 วัน"""
-    try:
-        r = requests.get(
-            f"{TMD_LEGACY}/WeatherForecast7DaysByRegion/V1/",
-            params={"format": "json"},
-            timeout=15,
-        )
-        if r.status_code == 200:
-            return r.json()
-    except Exception:
-        pass
-    return None
+    """ดึงพยากรณ์ 7 วัน รายภาค — WeatherForecast7DaysByRegion/V1"""
+    return _tmd_get("WeatherForecast7DaysByRegion/V1/")
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -457,9 +438,12 @@ with st.sidebar:
                                     placeholder="eyJ0eXAiOiJKV1Qi...")
         if token_input:
             TMD_TOKEN = token_input
-            st.success("✅ ตั้งค่า Token แล้ว")
+            TMD_UKEY  = token_input
+            TMD_UID   = _parse_uid(token_input)
+            st.success(f"✅ ตั้งค่า Token แล้ว (uid={TMD_UID})")
     else:
-        st.markdown(f"**🔑 Token:** `...{TMD_TOKEN[-8:]}`")
+        uid_str = f"uid={TMD_UID}" if TMD_UID else "uid=?"
+        st.markdown(f"**🔑 Token:** `{uid_str}` · `...{TMD_TOKEN[-8:]}`")
 
     st.markdown("---")
 
@@ -517,27 +501,44 @@ with col_title:
 with st.spinner("กำลังโหลดข้อมูลสภาพอากาศ..."):
     obs_data      = fetch_weather_today()
     obs_3h        = fetch_weather_3h()
-    warning_data  = fetch_warning() if False else fetch_weather_warning()
+    warning_data  = fetch_weather_warning()
     forecast_data = fetch_forecast_7days()
-    seismic_data  = fetch_seismic()
+    seismic_data  = _tmd_get("DailySeismicEvent/V1/")
 
 api_ok = obs_data is not None or obs_3h is not None
 
 # ─────────────────────────────────────────────────────────
 #  STATUS BAR
 # ─────────────────────────────────────────────────────────
-status_cols = st.columns(4)
+status_cols = st.columns(5)
 with status_cols[0]:
-    st.metric("🌐 API Status", "✅ เชื่อมต่อ" if api_ok else "❌ ไม่ได้เชื่อมต่อ")
+    if api_ok:
+        st.metric("🌐 API Status", "✅ เชื่อมต่อ")
+    elif TMD_TOKEN:
+        st.metric("🌐 API Status", "⚠️ Token Error")
+    else:
+        st.metric("🌐 API Status", "❌ ไม่มี Token")
 with status_cols[1]:
+    st.metric("🔑 User ID", TMD_UID if TMD_UID else "ไม่พบ")
+with status_cols[2]:
     n_stations = len(UNIQUE_STATIONS)
     st.metric("📍 สถานีรถไฟ", f"{n_stations} สถานี")
-with status_cols[2]:
+with status_cols[3]:
     n_lines = len(RAIL_LINES)
     st.metric("🛤️ สายรถไฟ", f"{n_lines} สาย")
-with status_cols[3]:
+with status_cols[4]:
     tz_th = pytz.timezone("Asia/Bangkok")
     st.metric("🕐 เวลา (ไทย)", datetime.now(tz_th).strftime("%H:%M น."))
+
+# Show diagnostic if API failed
+if not api_ok and TMD_TOKEN:
+    with st.expander("🔍 ข้อมูล Debug (คลิกเพื่อดู)", expanded=False):
+        st.code(f"""
+URL ที่ใช้ : http://data.tmd.go.th/api/WeatherToday/V2/
+uid        : {TMD_UID}
+ukey       : ...{TMD_UKEY[-20:] if TMD_UKEY else '(ว่าง)'}
+""")
+        st.caption("ถ้า uid ว่าง = JWT decode ล้มเหลว, ถ้า uid ถูกแต่ยัง error = Token หมดอายุหรือ IP blocked")
 
 st.markdown("")
 
