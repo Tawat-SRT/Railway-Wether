@@ -1,7 +1,7 @@
 """
-🚆 ระบบแจ้งเตือนสภาพอากาศโครงข่ายรถไฟไทย v3.0
-Thai Railway Network Weather & Disaster Alert System
-การรถไฟแห่งประเทศไทย × กรมอุตุนิยมวิทยา (TMD NWP API v1)
+🚆 SRT Weather Command Center
+ศูนย์เฝ้าระวังสภาพอากาศและปริมาณน้ำฝน · โครงข่ายรถไฟแห่งประเทศไทย
+สำหรับผู้บริหารงานเดินรถ · ข้อมูลจากกรมอุตุนิยมวิทยา (TMD NWP API v1)
 """
 
 import streamlit as st
@@ -18,7 +18,7 @@ import pytz
 #  PAGE CONFIG
 # ══════════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="SRT Weather Alert · ระบบแจ้งเตือนรถไฟ",
+    page_title="SRT Weather Command Center",
     page_icon="🚆",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -26,265 +26,249 @@ st.set_page_config(
 
 TZ_TH = pytz.timezone("Asia/Bangkok")
 NOW_TH = datetime.now(TZ_TH)
+TH_MONTHS = ["", "ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.",
+             "ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."]
+def th_datetime(dt):
+    return f"{dt.day} {TH_MONTHS[dt.month]} {dt.year+543} · {dt.strftime('%H:%M')} น."
 
 # ══════════════════════════════════════════════════════════════
-#  THEME & CSS  (รถไฟ + ราง)
+#  THEME  — Executive control-room aesthetic
 # ══════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&family=Kanit:wght@500;600;700;800&display=swap');
 
 *, html, body, [class*="css"] { font-family: 'Sarabun', sans-serif !important; }
+h1,h2,h3,.kanit { font-family: 'Kanit', sans-serif !important; }
+
+:root {
+    --bg0:#070d15; --bg1:#0b1420; --bg2:#101d2e; --panel:#0e1a29;
+    --line:#1c3247; --line2:#24405a;
+    --ink:#e8f1f8; --ink2:#9fbcd0; --ink3:#5f8199;
+    --accent:#38bdf8; --gold:#d4af37;
+    --ok:#10b981; --info:#3b82f6; --warn:#f59e0b; --crit:#ef4444;
+}
 
 .stApp {
     background:
-        repeating-linear-gradient(90deg, transparent 0 59px, rgba(255,255,255,0.012) 59px 60px),
-        linear-gradient(180deg, #0b1622 0%, #0d1f33 60%, #0b1622 100%);
+        radial-gradient(1200px 500px at 80% -10%, rgba(56,189,248,0.06), transparent),
+        linear-gradient(180deg, #070d15 0%, #0b1622 55%, #070d15 100%);
 }
+.block-container { padding-top: 1.4rem !important; max-width: 1500px; }
 
 /* Sidebar */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #060e18 0%, #0a1825 100%) !important;
-    border-right: 2px solid #1a3a5c !important;
+    background: linear-gradient(180deg,#060c14,#0a1622) !important;
+    border-right: 1px solid var(--line) !important;
 }
-[data-testid="stSidebar"] * { color: #a8cce0 !important; }
-[data-testid="stSidebar"]::after {
-    content: '';
-    position: fixed; bottom: 0; left: 0; width: 280px; height: 8px;
-    background: repeating-linear-gradient(90deg, #c8a84b 0 20px, transparent 20px 30px);
-    opacity: 0.4; z-index: 999;
-}
+[data-testid="stSidebar"] * { color: var(--ink2) !important; }
 
-/* Header */
-.rail-header {
-    background: linear-gradient(135deg, #0d2137 0%, #0a3060 40%, #0d2137 100%);
-    border: 1px solid #1a4a7a;
-    border-left: 6px solid #c8a84b;
-    border-radius: 0 12px 12px 0;
-    padding: 20px 28px;
-    margin-bottom: 16px;
+/* Hide default header */
+[data-testid="stHeader"] { background: transparent !important; }
+
+/* ── Command header ── */
+.cmd-header {
+    background: linear-gradient(110deg, #0c1d30 0%, #103456 45%, #0c1d30 100%);
+    border: 1px solid var(--line2);
+    border-radius: 16px;
+    padding: 22px 28px;
     position: relative; overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04);
 }
-.rail-header::before, .rail-header::after {
-    content: ''; position: absolute; left: 0; right: 0; height: 3px;
-    background: repeating-linear-gradient(90deg, #c8a84b 0 24px, transparent 24px 32px);
+.cmd-header::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background: repeating-linear-gradient(90deg, transparent 0 38px, rgba(212,175,55,0.05) 38px 40px);
 }
-.rail-header::before { top: 0; }
-.rail-header::after  { bottom: 0; }
-.rail-header h1 {
-    color: #fff !important; font-size: 1.75rem !important; font-weight: 800 !important;
-    margin: 0 0 4px 0 !important; text-shadow: 0 2px 12px rgba(91,200,255,0.3);
+.cmd-title { font-size:1.75rem; font-weight:800; color:#fff; margin:0;
+    letter-spacing:0.3px; display:flex; align-items:center; gap:12px; }
+.cmd-sub { color:var(--ink2); font-size:0.86rem; margin-top:5px; }
+.cmd-live {
+    display:inline-flex; align-items:center; gap:6px;
+    background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.4);
+    color:#34d399; font-size:0.74rem; font-weight:700; padding:3px 12px;
+    border-radius:20px;
 }
-.rail-header p { color: #7ec8e3 !important; font-size: 0.86rem !important; margin: 0 !important; }
-.rail-header .stamp {
-    position: absolute; right: 24px; top: 50%; transform: translateY(-50%);
-    color: rgba(200,168,75,0.12); font-size: 6rem; font-weight: 900; line-height: 1;
-    user-select: none;
-}
-
-/* KPI cards */
-.kpi-grid { display: flex; gap: 10px; flex-wrap: wrap; }
-.kpi-card {
-    flex: 1; min-width: 140px;
-    background: linear-gradient(135deg, rgba(13,33,55,0.95), rgba(8,24,44,0.95));
-    border: 1px solid #1a3a5c;
-    border-top: 3px solid var(--accent, #5bc8ff);
-    border-radius: 10px; padding: 14px 16px;
-    transition: box-shadow 0.2s, transform 0.1s;
-}
-.kpi-card:hover { box-shadow: 0 4px 20px rgba(91,200,255,0.15); transform: translateY(-1px); }
-.kpi-card .kpi-icon { font-size: 1.4rem; margin-bottom: 4px; display: block; }
-.kpi-card .kpi-label { color: #6899b8; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 3px; }
-.kpi-card .kpi-value { color: #fff; font-size: 1.6rem; font-weight: 800; line-height: 1; }
-.kpi-card .kpi-sub   { color: #7ec8e3; font-size: 0.72rem; margin-top: 3px; }
-.kpi-red    { --accent: #ef4444; }
-.kpi-orange { --accent: #f59e0b; }
-.kpi-blue   { --accent: #3b82f6; }
-.kpi-green  { --accent: #10b981; }
-.kpi-gold   { --accent: #c8a84b; }
-.kpi-purple { --accent: #a78bfa; }
-
-/* Alert cards */
-.alert-card {
-    border-radius: 9px; padding: 12px 16px; margin: 5px 0;
-    border-left: 4px solid; border: 1px solid;
-}
-.alert-critical { background: rgba(220,38,38,0.12); border-color: rgba(220,38,38,0.35); border-left-color: #ef4444; }
-.alert-warning  { background: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.35); border-left-color: #f59e0b; }
-.alert-info     { background: rgba(59,130,246,0.10); border-color: rgba(59,130,246,0.30); border-left-color: #3b82f6; }
-.alert-ok       { background: rgba(16,185,129,0.08); border-color: rgba(16,185,129,0.25); border-left-color: #10b981; }
-.alert-card-title { color: #fff; font-weight: 700; font-size: 0.94rem; margin: 0 0 3px 0; }
-.alert-card-body  { color: #a8cce0; font-size: 0.83rem; margin: 0; line-height: 1.5; }
-.alert-card-meta  { color: #5a8099; font-size: 0.72rem; margin-top: 4px; }
-
-/* Section title */
-.sec-title {
-    color: #5bc8ff; font-size: 1.0rem; font-weight: 700;
-    border-bottom: 1px solid rgba(91,200,255,0.2);
-    padding-bottom: 6px; margin: 16px 0 10px 0;
+.pulse { width:8px; height:8px; border-radius:50%; background:#34d399;
+    box-shadow:0 0 0 0 rgba(52,211,153,0.6); animation:pulse 2s infinite; }
+@keyframes pulse {
+    0%{box-shadow:0 0 0 0 rgba(52,211,153,0.6);}
+    70%{box-shadow:0 0 0 8px rgba(52,211,153,0);}
+    100%{box-shadow:0 0 0 0 rgba(52,211,153,0);}
 }
 
-/* Badges */
-.badge { display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 0.7rem; font-weight: 700; }
-.badge-critical { background: #7f1d1d; color: #fca5a5; border: 1px solid #ef4444; }
-.badge-high     { background: #78350f; color: #fde68a; border: 1px solid #f59e0b; }
-.badge-medium   { background: #1e3a5f; color: #93c5fd; border: 1px solid #3b82f6; }
-.badge-low      { background: #064e3b; color: #6ee7b7; border: 1px solid #10b981; }
-.badge-na       { background: #1e2a35; color: #6899b8; border: 1px solid #2a4a62; }
-
-/* Progress bar */
-.prog-wrap { background: rgba(255,255,255,0.06); border-radius: 6px; height: 7px; overflow: hidden; margin-top: 3px; }
-.prog-fill  { height: 100%; border-radius: 6px; transition: width 0.4s; }
-
-/* Streamlit overrides */
-div[data-testid="stMetric"] {
-    background: rgba(13,33,55,0.8) !important;
-    border: 1px solid rgba(91,200,255,0.15) !important;
-    border-radius: 10px !important; padding: 12px 14px !important;
+/* ── Alert banner ── */
+.alert-banner {
+    border-radius:14px; padding:16px 22px; margin:14px 0;
+    display:flex; align-items:center; gap:16px;
+    border:1px solid; position:relative; overflow:hidden;
 }
-div[data-testid="stMetric"] label { color: #6899b8 !important; font-size: 0.76rem !important; }
-div[data-testid="stMetric"] [data-testid="stMetricValue"] { color: #fff !important; font-weight: 700 !important; }
+.ab-crit { background:linear-gradient(100deg,rgba(239,68,68,0.22),rgba(120,20,20,0.28)); border-color:rgba(239,68,68,0.5); }
+.ab-warn { background:linear-gradient(100deg,rgba(245,158,11,0.18),rgba(120,80,10,0.22)); border-color:rgba(245,158,11,0.45); }
+.ab-ok   { background:linear-gradient(100deg,rgba(16,185,129,0.15),rgba(10,80,60,0.2)); border-color:rgba(16,185,129,0.4); }
+.ab-icon { font-size:2.4rem; line-height:1; }
+.ab-text h3 { margin:0; font-size:1.2rem; color:#fff; }
+.ab-text p  { margin:2px 0 0; font-size:0.88rem; color:var(--ink2); }
 
-.stTabs [data-baseweb="tab-list"] {
-    background: rgba(13,33,55,0.6) !important;
-    border-radius: 10px !important; gap: 4px !important; padding: 4px !important;
-    border: 1px solid rgba(91,200,255,0.1) !important;
+/* ── KPI tiles ── */
+.kpi {
+    background: linear-gradient(160deg, var(--panel), #0a1521);
+    border:1px solid var(--line);
+    border-radius:14px; padding:18px 20px; height:100%;
+    position:relative; overflow:hidden;
+    transition: transform .12s, box-shadow .12s, border-color .12s;
 }
-.stTabs [data-baseweb="tab"] { color: #6899b8 !important; border-radius: 7px !important; padding: 6px 16px !important; }
-.stTabs [aria-selected="true"] { background: rgba(91,200,255,0.15) !important; color: #5bc8ff !important; }
+.kpi:hover { transform:translateY(-2px); box-shadow:0 10px 28px rgba(0,0,0,0.35); border-color:var(--line2); }
+.kpi::after { content:''; position:absolute; top:0; left:0; width:100%; height:3px; background:var(--c,#38bdf8); }
+.kpi-top { display:flex; align-items:center; justify-content:space-between; }
+.kpi-ico { font-size:1.5rem; }
+.kpi-tag { font-size:0.66rem; font-weight:700; padding:2px 8px; border-radius:10px;
+    background:rgba(255,255,255,0.06); color:var(--ink3); text-transform:uppercase; letter-spacing:0.5px; }
+.kpi-val { font-family:'Kanit',sans-serif; font-size:2.1rem; font-weight:700; color:#fff; line-height:1; margin:10px 0 2px; }
+.kpi-val small { font-size:0.85rem; color:var(--ink2); font-weight:500; margin-left:3px; }
+.kpi-lab { color:var(--ink2); font-size:0.82rem; }
+.kpi-foot { color:var(--ink3); font-size:0.74rem; margin-top:6px; }
+.c-crit{--c:#ef4444;} .c-warn{--c:#f59e0b;} .c-info{--c:#3b82f6;}
+.c-ok{--c:#10b981;} .c-gold{--c:#d4af37;} .c-cyan{--c:#38bdf8;}
 
-div[data-testid="stExpander"] {
-    background: rgba(13,33,55,0.5) !important;
-    border: 1px solid rgba(91,200,255,0.12) !important;
-    border-radius: 10px !important;
+/* ── Panel ── */
+.panel {
+    background: linear-gradient(160deg, var(--panel), #0a1521);
+    border:1px solid var(--line); border-radius:14px; padding:18px 20px; height:100%;
 }
-div[data-testid="stExpander"] summary { color: #7ec8e3 !important; }
+.panel-h { font-family:'Kanit',sans-serif; color:var(--accent); font-size:0.92rem;
+    font-weight:600; margin:0 0 14px; display:flex; align-items:center; gap:8px;
+    border-bottom:1px solid var(--line); padding-bottom:10px; }
 
-.stButton > button {
-    background: linear-gradient(135deg, #0a3060, #0d4080) !important;
-    color: #d0e8f8 !important; border: 1px solid rgba(91,200,255,0.3) !important;
-    border-radius: 8px !important; font-weight: 600 !important;
-}
-.stButton > button:hover {
-    background: linear-gradient(135deg, #0d4080, #1055a0) !important;
-    box-shadow: 0 0 14px rgba(91,200,255,0.25) !important;
-}
+/* ── Rain bar (executive) ── */
+.rain-row { display:grid; grid-template-columns:130px 1fr 64px; align-items:center;
+    gap:12px; padding:7px 0; }
+.rain-name { color:var(--ink); font-size:0.84rem; font-weight:500; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; }
+.rain-track { background:rgba(255,255,255,0.05); border-radius:8px; height:22px; position:relative; overflow:hidden; }
+.rain-fill { height:100%; border-radius:8px; display:flex; align-items:center; justify-content:flex-end;
+    padding-right:8px; transition:width .5s cubic-bezier(.4,0,.2,1); min-width:2px; }
+.rain-val { text-align:right; font-family:'Kanit',sans-serif; font-weight:600; font-size:0.9rem; }
 
-div[data-baseweb="select"] > div {
-    background: rgba(10,25,45,0.8) !important;
-    border-color: rgba(91,200,255,0.2) !important;
-}
-div[data-baseweb="select"] * { color: #a8cce0 !important; }
+/* ── Risk list item ── */
+.risk-item { display:flex; align-items:center; gap:12px; padding:10px 0;
+    border-bottom:1px solid rgba(28,50,71,0.5); }
+.risk-rank { font-family:'Kanit',sans-serif; font-weight:700; font-size:1.1rem; color:var(--ink3); width:24px; text-align:center; }
+.risk-body { flex:1; min-width:0; }
+.risk-stn { color:var(--ink); font-weight:600; font-size:0.88rem; }
+.risk-meta { color:var(--ink3); font-size:0.74rem; }
+.risk-num { font-family:'Kanit',sans-serif; font-weight:700; font-size:1.15rem; text-align:right; }
 
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: #060e18; }
-::-webkit-scrollbar-thumb { background: #1a3a5c; border-radius: 3px; }
+/* ── badges ── */
+.bdg { padding:3px 10px; border-radius:20px; font-size:0.72rem; font-weight:700; white-space:nowrap; }
+.bdg-crit{ background:#7f1d1d; color:#fecaca; } .bdg-warn{ background:#78350f; color:#fde68a; }
+.bdg-info{ background:#1e3a5f; color:#bfdbfe; } .bdg-ok{ background:#064e3b; color:#a7f3d0; }
+.bdg-na{ background:#1f2937; color:#9ca3af; }
 
-.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
-.dot-green  { background: #10b981; box-shadow: 0 0 6px #10b981; }
-.dot-red    { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
-.dot-yellow { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
-.dot-grey   { background: #4a6070; }
+/* ── Metric chips ── */
+.chips { display:flex; gap:16px; flex-wrap:wrap; }
+.chip { display:flex; align-items:center; gap:7px; color:var(--ink2); font-size:0.82rem; }
+.chip b { color:var(--ink); }
 
-.dash-box {
-    background: linear-gradient(135deg, rgba(13,33,55,0.9), rgba(8,20,38,0.95));
-    border: 1px solid rgba(91,200,255,0.15);
-    border-radius: 12px; padding: 16px 20px; height: 100%;
-}
-.dash-box h4 {
-    color: #5bc8ff; font-size: 0.8rem; font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.7px;
-    margin: 0 0 10px 0;
-}
+/* ── Streamlit overrides ── */
+.stTabs [data-baseweb="tab-list"] { background:var(--bg1); border:1px solid var(--line);
+    border-radius:12px; gap:3px; padding:5px; }
+.stTabs [data-baseweb="tab"] { color:var(--ink3); border-radius:8px; padding:8px 20px; font-weight:600; }
+.stTabs [aria-selected="true"] { background:linear-gradient(135deg,#103456,#0c2640); color:#fff !important; }
+
+div[data-testid="stMetric"]{ background:var(--panel); border:1px solid var(--line);
+    border-radius:12px; padding:14px 16px; }
+div[data-testid="stMetric"] label{ color:var(--ink3) !important; font-size:0.76rem !important; }
+div[data-testid="stMetric"] [data-testid="stMetricValue"]{ color:#fff !important; font-family:'Kanit'; }
+
+div[data-baseweb="select"] > div{ background:var(--bg2) !important; border-color:var(--line2) !important; }
+div[data-baseweb="select"] *{ color:var(--ink) !important; }
+
+.stButton > button{ background:linear-gradient(135deg,#103456,#0c2640) !important;
+    color:var(--ink) !important; border:1px solid var(--line2) !important;
+    border-radius:10px !important; font-weight:600 !important; }
+.stButton > button:hover{ border-color:var(--accent) !important;
+    box-shadow:0 0 16px rgba(56,189,248,0.2) !important; }
+
+div[data-testid="stExpander"]{ background:var(--panel) !important; border:1px solid var(--line) !important; border-radius:12px !important; }
+.stDataFrame{ border-radius:10px !important; overflow:hidden !important; }
+
+::-webkit-scrollbar{ width:6px; height:6px; }
+::-webkit-scrollbar-track{ background:var(--bg0); }
+::-webkit-scrollbar-thumb{ background:var(--line2); border-radius:3px; }
+
+.sec-label { font-family:'Kanit',sans-serif; color:var(--ink); font-size:1.05rem;
+    font-weight:600; margin:6px 0 12px; display:flex; align-items:center; gap:10px; }
+.sec-label::before { content:''; width:4px; height:18px; background:var(--accent); border-radius:2px; }
 </style>
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════
-#  TOKEN MANAGEMENT  (session_state-backed)
+#  TOKEN
 # ══════════════════════════════════════════════════════════════
 def _decode_jwt(token):
     try:
-        payload = token.split(".")[1]
-        payload += "=" * (-len(payload) % 4)
-        return json.loads(base64.urlsafe_b64decode(payload))
+        p = token.split(".")[1]; p += "=" * (-len(p) % 4)
+        return json.loads(base64.urlsafe_b64decode(p))
     except Exception:
         return {}
 
 def _set_token(raw):
     raw = (raw or "").strip()
-    st.session_state["_tk"]      = raw
-    st.session_state["_tk_jwt"]  = _decode_jwt(raw)
-    st.session_state["_tk_uid"]  = str(st.session_state["_tk_jwt"].get("sub", ""))
+    st.session_state["_tk"] = raw
+    st.session_state["_tk_jwt"] = _decode_jwt(raw)
+    st.session_state["_tk_uid"] = str(st.session_state["_tk_jwt"].get("sub",""))
 
-# Bootstrap from secrets or env
 if "_tk" not in st.session_state:
     _boot = ""
     try:
-        _boot = str(st.secrets.get("TMD_TOKEN", "") or st.secrets.get("tmd_token", ""))
+        _boot = str(st.secrets.get("TMD_TOKEN","") or st.secrets.get("tmd_token",""))
     except Exception:
         pass
     if not _boot:
-        import os
-        _boot = os.environ.get("TMD_TOKEN", "")
+        import os; _boot = os.environ.get("TMD_TOKEN","")
     _set_token(_boot)
 
-def _token():    return st.session_state.get("_tk", "")
-def _uid():    return st.session_state.get("_tk_uid", "")
-def _jwt():   return st.session_state.get("_tk_jwt", {})
+def _token(): return st.session_state.get("_tk","")
+def _uid():   return st.session_state.get("_tk_uid","")
+def _jwt():   return st.session_state.get("_tk_jwt",{})
 
 # ══════════════════════════════════════════════════════════════
-#  SRT RAILWAY NETWORK  (datagov.mot.go.th, updated 2026)
+#  SRT RAILWAY NETWORK
 # ══════════════════════════════════════════════════════════════
 SRT_LINES = {
-    "สายเหนือ": {
-        "color": "#ef4444", "short": "N", "icon": "🔴",
-        "desc": "กรุงเทพ → เชียงใหม่ · 751 กม.",
-        "stations": [
+    "สายเหนือ": {"color":"#ef4444","short":"N","icon":"🔴","desc":"กรุงเทพ → เชียงใหม่ · 751 กม.",
+        "stations":[
             {"name":"กรุงเทพ (หัวลำโพง)","lat":13.7401,"lon":100.5178,"province":"กรุงเทพมหานคร","km":0},
             {"name":"ดอนเมือง","lat":13.9186,"lon":100.5970,"province":"กรุงเทพมหานคร","km":22},
-            {"name":"รังสิต","lat":14.0262,"lon":100.6162,"province":"ปทุมธานี","km":43},
             {"name":"อยุธยา","lat":14.3554,"lon":100.5679,"province":"พระนครศรีอยุธยา","km":71},
             {"name":"ลพบุรี","lat":14.7987,"lon":100.6141,"province":"ลพบุรี","km":133},
             {"name":"นครสวรรค์","lat":15.7028,"lon":100.1363,"province":"นครสวรรค์","km":246},
-            {"name":"พิจิตร","lat":16.4365,"lon":100.3485,"province":"พิจิตร","km":347},
             {"name":"พิษณุโลก","lat":16.8204,"lon":100.2714,"province":"พิษณุโลก","km":389},
             {"name":"อุตรดิตถ์","lat":17.6236,"lon":100.0987,"province":"อุตรดิตถ์","km":485},
             {"name":"เด่นชัย","lat":17.9827,"lon":100.0569,"province":"แพร่","km":535},
             {"name":"ลำปาง","lat":18.2896,"lon":99.4905,"province":"ลำปาง","km":642},
-            {"name":"ลำพูน","lat":18.5746,"lon":99.0094,"province":"ลำพูน","km":703},
             {"name":"เชียงใหม่","lat":18.7883,"lon":98.9933,"province":"เชียงใหม่","km":751},
-        ],
-    },
-    "สายตะวันออกเฉียงเหนือ": {
-        "color": "#f59e0b", "short": "NE", "icon": "🟡",
-        "desc": "กรุงเทพ → หนองคาย · 624 กม.",
-        "stations": [
+        ]},
+    "สายตะวันออกเฉียงเหนือ": {"color":"#f59e0b","short":"NE","icon":"🟡","desc":"กรุงเทพ → หนองคาย · 624 กม.",
+        "stations":[
             {"name":"กรุงเทพ (หัวลำโพง)","lat":13.7401,"lon":100.5178,"province":"กรุงเทพมหานคร","km":0},
-            {"name":"สระบุรี (ชุมทาง)","lat":14.5291,"lon":100.9101,"province":"สระบุรี","km":107},
+            {"name":"สระบุรี","lat":14.5291,"lon":100.9101,"province":"สระบุรี","km":107},
             {"name":"ปากช่อง","lat":14.7043,"lon":101.4180,"province":"นครราชสีมา","km":180},
             {"name":"นครราชสีมา","lat":14.9734,"lon":102.1112,"province":"นครราชสีมา","km":264},
-            {"name":"บัวใหญ่","lat":15.5887,"lon":102.4242,"province":"นครราชสีมา","km":361},
             {"name":"ขอนแก่น","lat":16.4419,"lon":102.8330,"province":"ขอนแก่น","km":449},
             {"name":"อุดรธานี","lat":17.4043,"lon":102.7877,"province":"อุดรธานี","km":569},
             {"name":"หนองคาย","lat":17.8818,"lon":102.7433,"province":"หนองคาย","km":624},
-        ],
-    },
-    "สายอีสานใต้": {
-        "color": "#a78bfa", "short": "IS", "icon": "🟣",
-        "desc": "นครราชสีมา → อุบลราชธานี · 305 กม.",
-        "stations": [
+        ]},
+    "สายอีสานใต้": {"color":"#a78bfa","short":"IS","icon":"🟣","desc":"นครราชสีมา → อุบลราชธานี · 305 กม.",
+        "stations":[
             {"name":"นครราชสีมา (ถนนจิระ)","lat":14.9734,"lon":102.1112,"province":"นครราชสีมา","km":0},
             {"name":"บุรีรัมย์","lat":14.9950,"lon":103.1030,"province":"บุรีรัมย์","km":101},
             {"name":"สุรินทร์","lat":14.8835,"lon":103.4935,"province":"สุรินทร์","km":142},
-            {"name":"ศีขรภูมิ","lat":14.9466,"lon":103.7889,"province":"สุรินทร์","km":175},
             {"name":"ศรีสะเกษ","lat":15.1174,"lon":104.3221,"province":"ศรีสะเกษ","km":237},
             {"name":"อุบลราชธานี","lat":15.2241,"lon":104.8579,"province":"อุบลราชธานี","km":305},
-        ],
-    },
-    "สายใต้": {
-        "color": "#34d399", "short": "S", "icon": "🟢",
-        "desc": "กรุงเทพ → สุไหงโก-ลก · 1,144 กม.",
-        "stations": [
+        ]},
+    "สายใต้": {"color":"#34d399","short":"S","icon":"🟢","desc":"กรุงเทพ → สุไหงโก-ลก · 1,144 กม.",
+        "stations":[
             {"name":"กรุงเทพ (หัวลำโพง)","lat":13.7401,"lon":100.5178,"province":"กรุงเทพมหานคร","km":0},
             {"name":"นครปฐม","lat":13.8199,"lon":100.0597,"province":"นครปฐม","km":56},
             {"name":"ราชบุรี","lat":13.5361,"lon":99.8163,"province":"ราชบุรี","km":117},
@@ -295,1145 +279,683 @@ SRT_LINES = {
             {"name":"สุราษฎร์ธานี","lat":9.1400,"lon":99.3300,"province":"สุราษฎร์ธานี","km":651},
             {"name":"นครศรีธรรมราช","lat":8.4330,"lon":99.9630,"province":"นครศรีธรรมราช","km":832},
             {"name":"หาดใหญ่","lat":7.0080,"lon":100.4740,"province":"สงขลา","km":945},
-            {"name":"ปาดังเบซาร์","lat":6.6735,"lon":100.3781,"province":"สงขลา","km":991},
             {"name":"สุไหงโก-ลก","lat":6.0277,"lon":101.9784,"province":"นราธิวาส","km":1144},
-        ],
-    },
-    "สายตะวันออก": {
-        "color": "#60a5fa", "short": "E", "icon": "🔵",
-        "desc": "กรุงเทพ → อรัญประเทศ · 255 กม.",
-        "stations": [
+        ]},
+    "สายตะวันออก": {"color":"#60a5fa","short":"E","icon":"🔵","desc":"กรุงเทพ → อรัญประเทศ · 255 กม.",
+        "stations":[
             {"name":"กรุงเทพ (มักกะสัน)","lat":13.7524,"lon":100.5684,"province":"กรุงเทพมหานคร","km":0},
             {"name":"ฉะเชิงเทรา","lat":13.6903,"lon":101.0768,"province":"ฉะเชิงเทรา","km":61},
             {"name":"ชลบุรี","lat":13.3639,"lon":100.9905,"province":"ชลบุรี","km":120},
             {"name":"พัทยา","lat":12.9236,"lon":100.8825,"province":"ชลบุรี","km":154},
-            {"name":"มาบตาพุด","lat":12.6793,"lon":101.1500,"province":"ระยอง","km":179},
             {"name":"อรัญประเทศ","lat":13.6942,"lon":102.5062,"province":"สระแก้ว","km":255},
-        ],
-    },
+        ]},
 }
 
-# Flatten unique stations
-_seen = set()
-ALL_STATIONS = []
-for _ln, _ld in SRT_LINES.items():
-    for _s in _ld["stations"]:
-        if _s["name"] not in _seen:
-            _seen.add(_s["name"])
-            ALL_STATIONS.append({**_s, "line": _ln, "line_color": _ld["color"],
-                                  "line_short": _ld["short"], "line_icon": _ld["icon"]})
-
 # ══════════════════════════════════════════════════════════════
-#  TMD NWP API v1  (Bearer token)
-#  Docs: https://data.tmd.go.th/nwpapi/doc/main/getting_start.html
+#  TMD NWP API v1
 # ══════════════════════════════════════════════════════════════
 TMD_NWP_BASE = "https://data.tmd.go.th/nwpapi/v1"
 
 def _nwp_get(path, params, token):
-    """Call NWP API endpoint. Returns (data, error_msg). data=None on error."""
     if not token:
         return None, "ไม่มี Token"
     url = f"{TMD_NWP_BASE}/{path.lstrip('/')}"
-    headers = {
-        "accept": "application/json",
-        "authorization": f"Bearer {token}",
-    }
+    headers = {"accept":"application/json", "authorization":f"Bearer {token}"}
     for attempt in range(2):
         try:
-            r = requests.get(url, headers=headers, params=params,
-                             timeout=15, allow_redirects=True)
+            r = requests.get(url, headers=headers, params=params, timeout=15, allow_redirects=True)
             if r.status_code == 200:
-                try:
-                    return r.json(), ""
-                except Exception:
-                    return None, f"Response 200 but not JSON: {r.text[:80]}"
-            elif r.status_code in (401, 403):
-                return None, f"HTTP {r.status_code}: Token ไม่ถูกต้องหรือหมดอายุ"
-            elif r.status_code == 404:
-                return None, f"HTTP 404: ไม่พบ endpoint {path}"
-            elif r.status_code == 429:
-                return None, "HTTP 429: เรียก API บ่อยเกินไป (rate limit)"
-            elif r.status_code >= 500:
-                if attempt < 1:
-                    time.sleep(1.0)
-                    continue
-                return None, f"HTTP {r.status_code}: เซิร์ฟเวอร์ TMD มีปัญหา"
-            else:
-                return None, f"HTTP {r.status_code}"
+                try: return r.json(), ""
+                except Exception: return None, f"200 non-JSON: {r.text[:60]}"
+            if r.status_code in (401,403): return None, f"HTTP {r.status_code}: Token ไม่ถูกต้อง/หมดอายุ"
+            if r.status_code == 404: return None, f"HTTP 404: {path}"
+            if r.status_code == 429: return None, "HTTP 429: rate limit"
+            if r.status_code >= 500:
+                if attempt < 1: time.sleep(1.0); continue
+                return None, f"HTTP {r.status_code}: server error"
+            return None, f"HTTP {r.status_code}"
         except requests.exceptions.Timeout:
-            if attempt < 1:
-                continue
-            return None, "Timeout (15s) — เซิร์ฟเวอร์ตอบช้า"
+            if attempt < 1: continue
+            return None, "Timeout 15s"
         except requests.exceptions.ConnectionError as e:
-            return None, f"ConnectionError: {str(e)[:80]}"
+            return None, f"ConnError: {str(e)[:60]}"
         except Exception as e:
-            return None, f"{type(e).__name__}: {str(e)[:80]}"
-    return None, "Unknown error"
+            return None, f"{type(e).__name__}: {str(e)[:60]}"
+    return None, "Unknown"
 
+DAILY_FIELDS = "tc_max,tc_min,rh,rain,cond,ws10m,wd10m"
+HOURLY_FIELDS = "tc,rh,rain,cond,ws10m"
 
-@st.cache_data(ttl=1800, show_spinner=False)
-def fetch_daily_at(lat, lon, token, days=3):
-    """พยากรณ์รายวันที่ตำแหน่ง lat/lon (endpoint /daily/at)"""
-    params = {
-        "lat": round(float(lat), 4), "lon": round(float(lon), 4),
-        "fields": "tc_max,tc_min,rh,rain,cond,ws10m,wd10m",
-        "date": NOW_TH.strftime("%Y-%m-%d"),
-        "hour": 6,
-        "duration": days,
-    }
-    data, _err = _nwp_get("forecast/location/daily/at", params, token)
-    return data
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_daily_at(lat, lon, token, days=7):
+    p = {"lat":round(float(lat),4),"lon":round(float(lon),4),"fields":DAILY_FIELDS,
+         "date":NOW_TH.strftime("%Y-%m-%d"),"hour":6,"duration":days}
+    return _nwp_get("forecast/location/daily/at", p, token)[0]
 
-
-@st.cache_data(ttl=1800, show_spinner=False)
-def fetch_daily_place(province, token, amphoe=None, days=3):
-    """พยากรณ์รายวันตามชื่อจังหวัด/อำเภอ (endpoint /daily/place) — แม่นกว่า lat/lon"""
-    params = {
-        "province": province,
-        "fields": "tc_max,tc_min,rh,rain,cond,ws10m,wd10m",
-        "date": NOW_TH.strftime("%Y-%m-%d"),
-        "hour": 6,
-        "duration": days,
-    }
-    if amphoe:
-        params["amphoe"] = amphoe
-    data, _err = _nwp_get("forecast/location/daily/place", params, token)
-    return data
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_daily_region(region_code, token, days=3):
-    """พยากรณ์รายวันของทุกจังหวัดในภูมิภาค (endpoint /daily/region)
-       region_code: N=เหนือ, NE=อีสาน, C=กลาง, E=ตะวันออก, S=ใต้ฝั่งตะวันออก, W=ใต้ฝั่งตะวันตก"""
-    params = {
-        "name": region_code,
-        "fields": "tc_max,tc_min,rh,rain,cond",
-        "date": NOW_TH.strftime("%Y-%m-%d"),
-        "hour": 6,
-        "duration": days,
-    }
-    data, _err = _nwp_get("forecast/location/daily/region", params, token)
-    return data
-
-
-@st.cache_data(ttl=86400, show_spinner=False)
-def fetch_daily_coverage(token):
-    """ขอบเขตข้อมูลพยากรณ์รายวันที่มีในระบบ (endpoint /forecast/location/daily)"""
-    data, err = _nwp_get("forecast/location/daily", {}, token)
-    return data, err
-
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_daily_place(province, token, days=7):
+    p = {"province":province,"fields":DAILY_FIELDS,
+         "date":NOW_TH.strftime("%Y-%m-%d"),"hour":6,"duration":days}
+    return _nwp_get("forecast/location/daily/place", p, token)[0]
 
 @st.cache_data(ttl=900, show_spinner=False)
 def fetch_hourly_at(lat, lon, token, hours=24):
-    """พยากรณ์ราย ชม. ที่ตำแหน่ง lat/lon (endpoint /hourly/at)"""
-    params = {
-        "lat": round(float(lat), 4), "lon": round(float(lon), 4),
-        "fields": "tc,rh,rain,cond,ws10m",
-        "date": NOW_TH.strftime("%Y-%m-%d"),
-        "hour": 0,
-        "duration": hours,
-    }
-    data, _err = _nwp_get("forecast/location/hourly/at", params, token)
-    return data
-
+    p = {"lat":round(float(lat),4),"lon":round(float(lon),4),"fields":HOURLY_FIELDS,
+         "date":NOW_TH.strftime("%Y-%m-%d"),"hour":0,"duration":hours}
+    return _nwp_get("forecast/location/hourly/at", p, token)[0]
 
 @st.cache_data(ttl=900, show_spinner=False)
-def fetch_hourly_place(province, token, amphoe=None, hours=24):
-    """พยากรณ์ราย ชม. ตามชื่อจังหวัด/อำเภอ (endpoint /hourly/place)"""
-    params = {
-        "province": province,
-        "fields": "tc,rh,rain,cond,ws10m",
-        "date": NOW_TH.strftime("%Y-%m-%d"),
-        "hour": 0,
-        "duration": hours,
-    }
-    if amphoe:
-        params["amphoe"] = amphoe
-    data, _err = _nwp_get("forecast/location/hourly/place", params, token)
-    return data
-
+def fetch_hourly_place(province, token, hours=24):
+    p = {"province":province,"fields":HOURLY_FIELDS,
+         "date":NOW_TH.strftime("%Y-%m-%d"),"hour":0,"duration":hours}
+    return _nwp_get("forecast/location/hourly/place", p, token)[0]
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def fetch_token_test(token):
-    """ทดสอบ token ว่าใช้งานได้หรือไม่ — ใช้ field พื้นฐาน tc ที่การันตีว่ามี"""
-    if not token:
-        return False, "ไม่มี Token"
-    params = {
-        "lat": 13.7563, "lon": 100.5018,
-        "fields": "tc",
-        "date": NOW_TH.strftime("%Y-%m-%d"),
-        "hour": 6,
-        "duration": 1,
-    }
-    data, err = _nwp_get("forecast/location/daily/at", params, token)
-    if data and isinstance(data, dict) and data.get("WeatherForecasts"):
+    if not token: return False, "ไม่มี Token"
+    p = {"lat":13.7563,"lon":100.5018,"fields":"tc","date":NOW_TH.strftime("%Y-%m-%d"),"hour":6,"duration":1}
+    d, err = _nwp_get("forecast/location/daily/at", p, token)
+    if d and isinstance(d, dict) and d.get("WeatherForecasts"):
         return True, "OK"
     return False, err
 
+# ── parse helpers ──
+def _scalar(v):
+    if v is None: return None
+    if isinstance(v, dict):
+        for k in ("value","val","data","amount"):
+            if k in v: return _scalar(v[k])
+        return None
+    if isinstance(v, list): return _scalar(v[0]) if v else None
+    return v
 
-# ══════════════════════════════════════════════════════════════
-#  HELPERS — parse NWP API response
-# ══════════════════════════════════════════════════════════════
-def _scalar(val):
-    """ดึงค่า scalar จาก field ที่อาจเป็น dict {'value':x} หรือ list หรือ scalar."""
-    if val is None:
-        return None
-    if isinstance(val, dict):
-        # TMD บางครั้งห่อค่าใน {"value": x} หรือ {"val": x}
-        for k in ("value", "val", "data", "amount"):
-            if k in val:
-                return _scalar(val[k])
-        return None
-    if isinstance(val, list):
-        return _scalar(val[0]) if val else None
-    return val
-
-def _to_float(val):
-    """แปลงเป็น float; คืน None ถ้าแปลงไม่ได้."""
-    val = _scalar(val)
-    if val is None or val == "" or val == "-":
-        return None
+def _to_float(v):
+    v = _scalar(v)
+    if v is None or v == "" or v == "-": return None
     try:
-        import math as _m
-        f = float(val)
-        return None if _m.isnan(f) else f
-    except (TypeError, ValueError):
-        return None
+        f = float(v); return None if math.isnan(f) else f
+    except (TypeError, ValueError): return None
 
 def _pick(d, *keys):
-    """ดึงค่าแรกที่เจอจากหลาย key (เผื่อ TMD เปลี่ยนชื่อ field)."""
     for k in keys:
-        if k in d and d[k] is not None:
-            return d[k]
+        if k in d and d[k] is not None: return d[k]
     return None
 
-
-def parse_coverage(data):
-    """แปลงข้อมูลขอบเขต (เริ่ม-สิ้นสุด) ของพยากรณ์รายวันในระบบ"""
-    if not data or not isinstance(data, dict):
-        return {}
-    cov = data.get("WeatherForecasts") or data.get("coverage") or data
-    if isinstance(cov, list) and cov:
-        cov = cov[0]
-    if not isinstance(cov, dict):
-        return {}
-    return {
-        "begin":  _scalar(_pick(cov, "begin_date", "beginDate", "start_date", "start", "begin")),
-        "end":    _scalar(_pick(cov, "end_date", "endDate", "stop_date", "stop", "end")),
-        "fields": cov.get("fields") or cov.get("Fields") or [],
-        "raw":    cov,
-    }
-
-
-def parse_daily_forecast(data):
-    """แปลง response เป็น list ของ forecasts รายวัน (ทนทานต่อ field ที่หาย/ซ้อน)"""
-    if not data or not isinstance(data, dict):
-        return []
-    wf = data.get("WeatherForecasts") or data.get("forecasts") or data.get("Forecasts") or []
-    if not wf or not isinstance(wf, list):
-        return []
-    forecasts = wf[0].get("forecasts", []) if isinstance(wf[0], dict) else []
-    result = []
-    for f in forecasts:
-        if not isinstance(f, dict):
-            continue
-        d = f.get("data", {}) or {}
-        result.append({
-            "time":   f.get("time", "") or f.get("Time", ""),
-            "tc_max": _to_float(_pick(d, "tc_max", "tcMax", "tmax", "tc")),
-            "tc_min": _to_float(_pick(d, "tc_min", "tcMin", "tmin")),
-            "rh":     _to_float(_pick(d, "rh", "humidity", "RH")),
-            "rain":   _to_float(_pick(d, "rain", "rainfall", "Rain", "precip")),
-            "cond":   _scalar(_pick(d, "cond", "condition", "Cond")),
-            "wd":     _to_float(_pick(d, "wd10m", "wd", "winddir", "wind_dir")),
-            "ws":     _to_float(_pick(d, "ws10m", "ws", "windspeed", "wind_speed")),
-        })
-    return result
-
-
-def parse_hourly_forecast(data):
-    """แปลง response เป็น list ของ forecasts รายชั่วโมง (ทนทาน)"""
-    if not data or not isinstance(data, dict):
-        return []
+def parse_daily(data):
+    if not data or not isinstance(data, dict): return []
     wf = data.get("WeatherForecasts") or data.get("forecasts") or []
-    if not wf or not isinstance(wf, list):
-        return []
-    forecasts = wf[0].get("forecasts", []) if isinstance(wf[0], dict) else []
-    result = []
-    for f in forecasts:
-        if not isinstance(f, dict):
-            continue
+    if not wf or not isinstance(wf, list): return []
+    fcs = wf[0].get("forecasts", []) if isinstance(wf[0], dict) else []
+    out = []
+    for f in fcs:
+        if not isinstance(f, dict): continue
         d = f.get("data", {}) or {}
-        result.append({
-            "time": f.get("time", "") or f.get("Time", ""),
-            "tc":   _to_float(_pick(d, "tc", "temp", "temperature")),
-            "rh":   _to_float(_pick(d, "rh", "humidity", "RH")),
-            "rain": _to_float(_pick(d, "rain", "rainfall", "Rain", "precip")),
-            "cond": _scalar(_pick(d, "cond", "condition", "Cond")),
-            "ws":   _to_float(_pick(d, "ws10m", "ws", "windspeed", "wind_speed")),
+        out.append({
+            "time": f.get("time","") or f.get("Time",""),
+            "tc_max": _to_float(_pick(d,"tc_max","tcMax","tmax","tc")),
+            "tc_min": _to_float(_pick(d,"tc_min","tcMin","tmin")),
+            "rh":   _to_float(_pick(d,"rh","humidity")),
+            "rain": _to_float(_pick(d,"rain","rainfall","precip")),
+            "cond": _scalar(_pick(d,"cond","condition")),
+            "ws":   _to_float(_pick(d,"ws10m","ws","windspeed")),
+            "wd":   _to_float(_pick(d,"wd10m","wd","winddir")),
         })
-    return result
+    return out
 
+def parse_hourly(data):
+    if not data or not isinstance(data, dict): return []
+    wf = data.get("WeatherForecasts") or []
+    if not wf or not isinstance(wf, list): return []
+    fcs = wf[0].get("forecasts", []) if isinstance(wf[0], dict) else []
+    out = []
+    for f in fcs:
+        if not isinstance(f, dict): continue
+        d = f.get("data", {}) or {}
+        out.append({
+            "time": f.get("time","") or f.get("Time",""),
+            "tc":   _to_float(_pick(d,"tc","temp")),
+            "rh":   _to_float(_pick(d,"rh","humidity")),
+            "rain": _to_float(_pick(d,"rain","rainfall","precip")),
+            "cond": _scalar(_pick(d,"cond","condition")),
+            "ws":   _to_float(_pick(d,"ws10m","ws","windspeed")),
+        })
+    return out
 
-# TMD weather condition codes
-COND_MAP = {
-    1:"ท้องฟ้าแจ่มใส ☀️", 2:"มีเมฆบางส่วน 🌤️", 3:"เมฆเป็นส่วนมาก ⛅",
-    4:"มีเมฆมาก ☁️",     5:"ฝนตกเล็กน้อย 🌦️",  6:"ฝนปานกลาง 🌧️",
-    7:"ฝนตกหนัก ⛈️",     8:"ฝนฟ้าคะนอง ⛈️",    9:"อากาศหนาวจัด ❄️",
-    10:"อากาศหนาว 🥶",    11:"อากาศเย็น 😎",     12:"อากาศร้อนจัด 🥵",
-}
+# ── TMD condition codes ──
+COND_MAP = {1:("ท้องฟ้าแจ่มใส","☀️"),2:("มีเมฆบางส่วน","🌤️"),3:("เมฆเป็นส่วนมาก","⛅"),
+    4:("มีเมฆมาก","☁️"),5:("ฝนตกเล็กน้อย","🌦️"),6:("ฝนปานกลาง","🌧️"),
+    7:("ฝนตกหนัก","⛈️"),8:("ฝนฟ้าคะนอง","⛈️"),9:("อากาศหนาวจัด","❄️"),
+    10:("อากาศหนาว","🥶"),11:("อากาศเย็น","😎"),12:("อากาศร้อนจัด","🥵")}
+def cond_text(c):
+    try: t = COND_MAP.get(int(c)); return f"{t[1]} {t[0]}" if t else f"รหัส {c}"
+    except Exception: return "—"
+def cond_emoji(c):
+    try: t = COND_MAP.get(int(c)); return t[1] if t else "•"
+    except Exception: return "•"
 
-def cond_text(cond_code):
-    try:
-        return COND_MAP.get(int(cond_code), f"รหัส {cond_code}")
-    except Exception:
-        return "—"
+# ── rainfall risk model (TMD criteria) ──
+def rain_risk(mm):
+    """return (level_int, label, emoji, hex, badge_class)"""
+    if mm is None:        return (-1,"ไม่มีข้อมูล","⚪","#5f8199","bdg-na")
+    if mm <= 0:           return (0,"ไม่มีฝน","☀️","#10b981","bdg-ok")
+    if mm < 10:           return (1,"ฝนเล็กน้อย","🌦️","#22c55e","bdg-ok")
+    if mm < 35:           return (2,"ฝนปานกลาง","🌧️","#3b82f6","bdg-info")
+    if mm < 90:           return (3,"ฝนหนัก","⛈️","#f59e0b","bdg-warn")
+    return (4,"ฝนหนักมาก","🌊","#ef4444","bdg-crit")
 
-
-# ══════════════════════════════════════════════════════════════
-#  RISK CLASSIFICATION
-# ══════════════════════════════════════════════════════════════
-def risk_class(rain_mm):
-    """Returns (label_th, emoji, badge_class, alert_class)"""
-    if rain_mm is None:
-        return "ไม่มีข้อมูล", "⚪", "badge-na", "alert-info"
-    try:
-        rain_mm = float(rain_mm)
-    except Exception:
-        return "ไม่มีข้อมูล", "⚪", "badge-na", "alert-info"
-    if rain_mm <= 0:    return "ปกติ",         "☀️", "badge-low",      "alert-ok"
-    if rain_mm < 10:    return "ฝนเล็กน้อย",   "🌦️", "badge-low",      "alert-ok"
-    if rain_mm < 35:    return "ฝนปานกลาง",    "🌧️", "badge-medium",   "alert-info"
-    if rain_mm < 90:    return "ฝนหนัก ⚠️",    "⛈️", "badge-high",     "alert-warning"
-    return                     "ฝนหนักมาก 🚨", "🌊", "badge-critical", "alert-critical"
-
-def risk_color_hex(rain_mm):
-    if rain_mm is None: return "#4a6070"
-    try:    rain_mm = float(rain_mm)
-    except: return "#4a6070"
-    if rain_mm < 10:    return "#10b981"
-    if rain_mm < 35:    return "#3b82f6"
-    if rain_mm < 90:    return "#f59e0b"
-    return "#ef4444"
-
+def rain_hex(mm):
+    return rain_risk(mm)[3]
 
 # ══════════════════════════════════════════════════════════════
 #  SIDEBAR
 # ══════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("""
-    <div style='text-align:center;padding:16px 0 18px;'>
-        <div style='font-size:3rem;'>🚆</div>
-        <div style='color:#5bc8ff;font-size:1.05rem;font-weight:800;letter-spacing:0.4px;'>SRT Weather Alert</div>
-        <div style='color:#4a7090;font-size:0.74rem;'>ระบบแจ้งเตือนสภาพอากาศ</div>
-        <div style='color:#4a7090;font-size:0.74rem;'>โครงข่ายรถไฟแห่งประเทศไทย</div>
-    </div>
-    """, unsafe_allow_html=True)
+    <div style='text-align:center;padding:10px 0 16px;'>
+        <div style='font-size:2.6rem;'>🚆</div>
+        <div style='font-family:Kanit;color:#fff;font-size:1.1rem;font-weight:700;'>Weather Command</div>
+        <div style='color:#5f8199;font-size:0.72rem;letter-spacing:0.5px;'>SRT EXECUTIVE CENTER</div>
+    </div>""", unsafe_allow_html=True)
 
-    # ── Token panel ────────────────────────────────────────────
+    # Token
     if _token():
-        _jwt_data = _jwt()
-        _exp_ts = _jwt_data.get("exp", 0)
-        _exp_dt = datetime.fromtimestamp(_exp_ts, tz=TZ_TH) if _exp_ts else None
-        _days   = (_exp_dt - NOW_TH).days if _exp_dt else 0
-        _color  = "#10b981" if _days > 30 else "#f59e0b" if _days > 0 else "#ef4444"
+        jd = _jwt(); exp = jd.get("exp",0)
+        exp_dt = datetime.fromtimestamp(exp, tz=TZ_TH) if exp else None
+        days = (exp_dt - NOW_TH).days if exp_dt else 0
+        col = "#10b981" if days>30 else "#f59e0b" if days>0 else "#ef4444"
         st.markdown(f"""
-        <div style='background:rgba(10,20,35,0.85);border:1px solid rgba(91,200,255,0.18);
-            border-radius:8px;padding:10px 14px;margin-bottom:12px;'>
-            <div style='color:#4a7090;font-size:0.71rem;'>🔑 TMD NWP API Token</div>
-            <div style='color:#5bc8ff;font-size:0.82rem;font-weight:600;'>
-                uid: <b style='color:#fff;'>{_uid()}</b>
-            </div>
-            <div style='color:{_color};font-size:0.74rem;margin-top:2px;'>
-                {"✅ ใช้งานได้" if _days > 0 else "❌ หมดอายุแล้ว"}
-                {f" · เหลือ {_days} วัน" if _days > 0 else ""}
-            </div>
+        <div style='background:rgba(10,20,35,0.8);border:1px solid #1c3247;border-radius:10px;padding:10px 14px;margin-bottom:14px;'>
+            <div style='color:#5f8199;font-size:0.7rem;'>🔑 TMD NWP API</div>
+            <div style='color:#38bdf8;font-size:0.8rem;font-weight:600;'>uid <b style='color:#fff;'>{_uid()}</b></div>
+            <div style='color:{col};font-size:0.72rem;margin-top:2px;'>{"●ใช้งานได้ ·เหลือ "+str(days)+"วัน" if days>0 else "●หมดอายุ"}</div>
         </div>""", unsafe_allow_html=True)
-
-        if st.button("🔄 เปลี่ยน Token", use_container_width=True, key="btn_change"):
-            _set_token("")
-            st.cache_data.clear()
-            st.rerun()
+        if st.button("เปลี่ยน Token", use_container_width=True):
+            _set_token(""); st.cache_data.clear(); st.rerun()
     else:
-        st.markdown("<div style='color:#ef4444;font-size:0.8rem;margin-bottom:6px;'>⚠️ ยังไม่ได้ใส่ Token</div>",
-                    unsafe_allow_html=True)
-        _t_in = st.text_input("Token", type="password",
-            placeholder="eyJ0eXAiOiJKV1Qi...", label_visibility="collapsed",
-            help="JWT token จาก https://data.tmd.go.th/nwpapi")
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("✅ ใช้งาน", use_container_width=True, key="btn_use_tk"):
-                if _t_in.strip():
-                    _set_token(_t_in.strip())
-                    st.cache_data.clear()
-                    st.rerun()
-                else:
-                    st.error("กรุณาใส่ Token")
-        with c2:
-            st.markdown("<a href='https://data.tmd.go.th/nwpapi/doc/main/getting_start.html' "
-                        "target='_blank' style='font-size:0.74rem;color:#5bc8ff;text-decoration:none;'>"
-                        "📖 คู่มือ</a>", unsafe_allow_html=True)
+        st.markdown("<div style='color:#ef4444;font-size:0.8rem;'>⚠️ ใส่ Token เพื่อเริ่มใช้งาน</div>", unsafe_allow_html=True)
+        ti = st.text_input("Token", type="password", placeholder="eyJ0eXA...", label_visibility="collapsed")
+        if st.button("✅ เชื่อมต่อ", use_container_width=True):
+            if ti.strip(): _set_token(ti.strip()); st.cache_data.clear(); st.rerun()
 
-    st.markdown("---")
+    st.markdown("<hr style='border-color:#1c3247;margin:14px 0;'>", unsafe_allow_html=True)
 
-    # ── Line filter ────────────────────────────────────────────
-    st.markdown("<div style='color:#5bc8ff;font-size:0.76rem;font-weight:700;"
-                "text-transform:uppercase;letter-spacing:0.7px;margin-bottom:5px;'>"
-                "🛤️ เส้นทาง</div>", unsafe_allow_html=True)
-    sel_line = st.selectbox("เส้นทาง", ["ทุกสาย"] + list(SRT_LINES.keys()),
-                             label_visibility="collapsed")
+    st.markdown("<div style='color:#38bdf8;font-size:0.74rem;font-weight:700;letter-spacing:0.6px;margin-bottom:5px;'>🛤️ เส้นทาง</div>", unsafe_allow_html=True)
+    sel_line = st.selectbox("line", ["ทุกสาย"]+list(SRT_LINES.keys()), label_visibility="collapsed")
 
-    st.markdown("<div style='color:#5bc8ff;font-size:0.76rem;font-weight:700;"
-                "text-transform:uppercase;letter-spacing:0.7px;margin:10px 0 5px;'>"
-                "⚠️ ระดับการแจ้งเตือน</div>", unsafe_allow_html=True)
-    sel_thresh = st.select_slider("ระดับ",
-        ["ทั้งหมด","ฝนเล็กน้อย","ฝนปานกลาง","ฝนหนัก","ฝนหนักมาก"],
-        value="ทั้งหมด", label_visibility="collapsed")
+    st.markdown("<div style='color:#38bdf8;font-size:0.74rem;font-weight:700;letter-spacing:0.6px;margin:12px 0 5px;'>📅 วันพยากรณ์</div>", unsafe_allow_html=True)
+    HORIZONS = ["วันนี้","พรุ่งนี้","มะรืน","+3 วัน","+4 วัน","+5 วัน","+6 วัน"]
+    sel_day = st.selectbox("day", HORIZONS, label_visibility="collapsed")
+    day_idx = HORIZONS.index(sel_day)
 
-    st.markdown("<div style='color:#5bc8ff;font-size:0.76rem;font-weight:700;"
-                "text-transform:uppercase;letter-spacing:0.7px;margin:10px 0 5px;'>"
-                "📅 ช่วงเวลา</div>", unsafe_allow_html=True)
-    sel_horizon = st.radio("วัน", ["วันนี้","พรุ่งนี้","มะรืน"],
-                            horizontal=True, label_visibility="collapsed")
-
-    st.markdown("---")
-    # ── Real-time auto-refresh ─────────────────────────────────
-    st.markdown("<div style='color:#5bc8ff;font-size:0.76rem;font-weight:700;"
-                "text-transform:uppercase;letter-spacing:0.7px;margin-bottom:5px;'>"
-                "🔴 Real-time</div>", unsafe_allow_html=True)
-    auto_refresh = st.toggle("เชื่อมข้อมูลอัตโนมัติ", value=False,
-                             help="รีโหลดข้อมูลอัตโนมัติตามรอบเวลา")
+    st.markdown("<div style='color:#38bdf8;font-size:0.74rem;font-weight:700;letter-spacing:0.6px;margin:12px 0 5px;'>🔴 Real-time</div>", unsafe_allow_html=True)
+    auto = st.toggle("เชื่อมข้อมูลอัตโนมัติ", value=False)
     refresh_sec = 0
-    if auto_refresh:
-        refresh_label = st.selectbox("รอบเวลา", ["1 นาที","5 นาที","10 นาที"],
-                                      index=1, label_visibility="collapsed")
-        refresh_sec = {"1 นาที":60, "5 นาที":300, "10 นาที":600}[refresh_label]
+    if auto:
+        rl = st.selectbox("rate", ["1 นาที","5 นาที","10 นาที"], index=1, label_visibility="collapsed")
+        refresh_sec = {"1 นาที":60,"5 นาที":300,"10 นาที":600}[rl]
 
     if st.button("🔄 รีเฟรชเดี๋ยวนี้", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
+        st.cache_data.clear(); st.rerun()
 
     st.markdown(f"""
-    <div style='color:#4a7090;font-size:0.74rem;line-height:1.7;margin-top:8px;'>
+    <div style='color:#5f8199;font-size:0.74rem;margin-top:12px;line-height:1.7;'>
         🕐 ดึงข้อมูลล่าสุด<br>
-        <span style='color:#5bc8ff;font-size:0.92rem;font-weight:700;'>
-            {NOW_TH.strftime('%d %b · %H:%M:%S')} น.
-        </span>
-        {"<br><span style='color:#10b981;'>🔴 auto-refresh เปิด</span>" if auto_refresh else ""}
+        <span style='color:#38bdf8;font-weight:700;font-size:0.84rem;'>{th_datetime(NOW_TH)}</span>
+        {"<br><span style='color:#10b981;'>🔴 auto-refresh เปิด</span>" if auto else ""}
     </div>""", unsafe_allow_html=True)
 
-    st.markdown("---")
-    for _ln, _ld in SRT_LINES.items():
-        st.markdown(f"""
-        <div style='display:flex;align-items:center;gap:8px;margin:3px 0;'>
-            <div style='width:26px;height:4px;border-radius:2px;background:{_ld["color"]};'></div>
-            <span style='color:#6899b8;font-size:0.74rem;'>{_ld["short"]} {_ln}</span>
-        </div>""", unsafe_allow_html=True)
-
-    st.markdown("""
-    <div style='color:#2a4060;font-size:0.68rem;margin-top:14px;line-height:1.7;'>
-        ข้อมูลอุตุฯ: <b>TMD NWP API v1</b><br>
-        โครงข่าย: รฟท. (datagov.mot.go.th)<br>
-        v3.0 · มิถุนายน 2569
-    </div>""", unsafe_allow_html=True)
-
+    st.markdown("<hr style='border-color:#1c3247;margin:14px 0;'>", unsafe_allow_html=True)
+    for ln, ld in SRT_LINES.items():
+        st.markdown(f"<div style='display:flex;align-items:center;gap:8px;margin:3px 0;'><div style='width:24px;height:3px;background:{ld['color']};border-radius:2px;'></div><span style='color:#5f8199;font-size:0.72rem;'>{ld['short']} · {ln}</span></div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════
-#  TEST TOKEN + LOAD STATION DATA
+#  LOAD DATA
 # ══════════════════════════════════════════════════════════════
-_horizon_index = {"วันนี้":0, "พรุ่งนี้":1, "มะรืน":2}[sel_horizon]
-_api_ok, _api_err = (False, "ไม่มี Token")
+api_ok, api_err = (False, "ไม่มี Token")
 if _token():
-    _api_ok, _api_err = fetch_token_test(_token())
+    api_ok, api_err = fetch_token_test(_token())
 
-# ── ขอบเขตข้อมูลพยากรณ์ที่มีในระบบ (data coverage) ─────────────
-_coverage, _coverage_err = (None, "")
-if _api_ok:
-    _coverage, _coverage_err = fetch_daily_coverage(_token())
+# Build station list
+stations = []
+seen = set()
+for ln, ld in SRT_LINES.items():
+    if sel_line != "ทุกสาย" and ln != sel_line: continue
+    for s in ld["stations"]:
+        if s["name"] in seen: continue
+        seen.add(s["name"])
+        stations.append({**s, "line":ln, "line_color":ld["color"],
+                         "line_short":ld["short"], "line_icon":ld["icon"]})
 
-# ── Build filtered + deduplicated station list ────────────────
-_filtered_stations = []
-_seen_names = set()
-for _ln, _ld in SRT_LINES.items():
-    if sel_line != "ทุกสาย" and _ln != sel_line:
-        continue
-    for _s in _ld["stations"]:
-        if _s["name"] in _seen_names:
-            continue
-        _seen_names.add(_s["name"])
-        _filtered_stations.append({**_s, "line": _ln, "line_color": _ld["color"],
-                                    "line_short": _ld["short"], "line_icon": _ld["icon"]})
-
-# ── Fetch weather for a batch of stations (cached) ────────────
-# NOTE: _nwp_get is plain (not cached) so nesting here is safe.
-#       cache_bucket lets us force-refresh on a time interval (real-time).
 @st.cache_data(ttl=600, show_spinner=False)
-def fetch_station_batch(stations_tuple, token, horizon_idx, cache_bucket):
-    """ดึงพยากรณ์รายวันของหลายสถานี (cache 10 นาที, refresh ตาม cache_bucket)"""
-    results = []
-    n_ok = 0
-    for s_json in stations_tuple:
-        s = json.loads(s_json)
-        chosen = {}
-        fetched = False
+def load_all(stns_tuple, token, day_idx, bucket):
+    rows = []; n_ok = 0
+    for sj in stns_tuple:
+        s = json.loads(sj)
+        chosen = {}; series = []
         if token:
-            today_str = NOW_TH.strftime("%Y-%m-%d")
-            # วิธีที่ 1: ดึงตามพิกัด lat/lon (แม่นยำที่สุด)
-            params = {
-                "lat": round(s["lat"], 4), "lon": round(s["lon"], 4),
-                "fields": "tc_max,tc_min,rh,rain,cond,ws10m,wd10m",
-                "date": today_str, "hour": 6, "duration": 3,
-            }
-            _d, _e = _nwp_get("forecast/location/daily/at", params, token)
-            _fc = parse_daily_forecast(_d)
-            # วิธีที่ 2 (fallback): ถ้า lat/lon ไม่ได้ผล ลองดึงตามจังหวัด
-            if not _fc and s.get("province"):
-                params_p = {
-                    "province": s["province"],
-                    "fields": "tc_max,tc_min,rh,rain,cond,ws10m,wd10m",
-                    "date": today_str, "hour": 6, "duration": 3,
-                }
-                _dp, _ep = _nwp_get("forecast/location/daily/place", params_p, token)
-                _fc = parse_daily_forecast(_dp)
-            if _fc:
-                chosen = _fc[horizon_idx] if horizon_idx < len(_fc) else _fc[-1]
-                fetched = True
+            d = fetch_daily_at(s["lat"], s["lon"], token, days=7)
+            fc = parse_daily(d)
+            if not fc and s.get("province"):
+                d = fetch_daily_place(s["province"], token, days=7)
+                fc = parse_daily(d)
+            if fc:
+                series = fc
+                chosen = fc[day_idx] if day_idx < len(fc) else fc[-1]
                 n_ok += 1
-        results.append({
-            "name":      s["name"],
-            "lat":       s["lat"],
-            "lon":       s["lon"],
-            "province":  s["province"],
-            "km":        s.get("km", 0),
-            "line":      s["line"],
-            "line_color":s["line_color"],
-            "line_short":s["line_short"],
-            "line_icon": s["line_icon"],
-            "rain":      chosen.get("rain"),
-            "tc_max":    chosen.get("tc_max"),
-            "tc_min":    chosen.get("tc_min"),
-            "rh":        chosen.get("rh"),
-            "cond":      chosen.get("cond"),
-            "wd":        chosen.get("wd"),
-            "ws":        chosen.get("ws"),
-            "time":      chosen.get("time", ""),
-            "fetched":   fetched,
-        })
-    return results, n_ok
+        rows.append({**s,
+            "rain":chosen.get("rain"), "tc_max":chosen.get("tc_max"),
+            "tc_min":chosen.get("tc_min"), "rh":chosen.get("rh"),
+            "cond":chosen.get("cond"), "ws":chosen.get("ws"), "wd":chosen.get("wd"),
+            "time":chosen.get("time",""), "series":series})
+    return rows, n_ok
 
-# Build station data — cache_bucket changes every 10 min for auto-refresh
-_stns_tuple = tuple(json.dumps(s, ensure_ascii=False) for s in _filtered_stations)
-_cache_bucket = int(time.time() // 600)   # เปลี่ยนทุก 10 นาที → ดึงข้อมูลใหม่
-_n_fetched = 0
-with st.spinner(f"⏳ กำลังเชื่อมข้อมูลพยากรณ์ {len(_filtered_stations)} สถานีแบบ real-time..."):
-    if _api_ok:
-        station_data, _n_fetched = fetch_station_batch(
-            _stns_tuple, _token(), _horizon_index, _cache_bucket)
+bucket = int(time.time()//600)
+n_fetched = 0
+with st.spinner(f"⏳ เชื่อมข้อมูลพยากรณ์ {len(stations)} สถานีแบบ real-time..."):
+    if api_ok:
+        sd_tuple = tuple(json.dumps(s, ensure_ascii=False) for s in stations)
+        station_data, n_fetched = load_all(sd_tuple, _token(), day_idx, bucket)
     else:
-        # Build placeholder data so UI still renders
-        station_data = [{**s, "rain":None, "tc_max":None, "tc_min":None, "rh":None,
-                         "cond":None, "wd":None, "ws":None, "time":"", "fetched":False}
-                        for s in _filtered_stations]
+        station_data = [{**s,"rain":None,"tc_max":None,"tc_min":None,"rh":None,
+                         "cond":None,"ws":None,"wd":None,"time":"","series":[]} for s in stations]
 
-# Aggregate metrics
-_THRESH = {"ทั้งหมด":0, "ฝนเล็กน้อย":1, "ฝนปานกลาง":10, "ฝนหนัก":35, "ฝนหนักมาก":90}
-_min_rain = _THRESH.get(sel_thresh, 0)
-
-_all_rains = [s["rain"] for s in station_data if s["rain"] is not None]
-_all_temps = [s["tc_max"] for s in station_data if s["tc_max"] is not None]
-_n_critical = sum(1 for r in _all_rains if r >= 90)
-_n_heavy    = sum(1 for r in _all_rains if 35 <= r < 90)
-_n_medium   = sum(1 for r in _all_rains if 10 <= r < 35)
-_n_ok       = sum(1 for r in _all_rains if r < 10)
-_max_rain   = max(_all_rains) if _all_rains else None
-_avg_rain   = round(sum(_all_rains)/len(_all_rains), 1) if _all_rains else None
-_avg_temp   = round(sum(_all_temps)/len(_all_temps), 1) if _all_temps else None
+# Aggregates
+rains = [s["rain"] for s in station_data if s["rain"] is not None]
+temps = [s["tc_max"] for s in station_data if s["tc_max"] is not None]
+n_crit  = sum(1 for r in rains if r>=90)
+n_heavy = sum(1 for r in rains if 35<=r<90)
+n_med   = sum(1 for r in rains if 10<=r<35)
+n_ok    = sum(1 for r in rains if r<10)
+max_rain = max(rains) if rains else None
+avg_rain = sum(rains)/len(rains) if rains else None
+total_rain = sum(rains) if rains else 0
+avg_temp = sum(temps)/len(temps) if temps else None
 
 # ══════════════════════════════════════════════════════════════
 #  HEADER
 # ══════════════════════════════════════════════════════════════
+_live = ('<span class="cmd-live"><span class="pulse"></span>LIVE · REAL-TIME</span>'
+         if api_ok else '<span class="cmd-live" style="background:rgba(239,68,68,0.15);border-color:rgba(239,68,68,0.4);color:#f87171;">● OFFLINE</span>')
 st.markdown(f"""
-<div class='rail-header'>
-    <div class='stamp'>🚂</div>
-    <h1>🚆 ระบบแจ้งเตือนสภาพอากาศโครงข่ายรถไฟไทย</h1>
-    <p>Thai Railway Network Weather & Disaster Alert System
-    · การรถไฟแห่งประเทศไทย (SRT) × กรมอุตุนิยมวิทยา (TMD)
-    · ข้อมูล {sel_horizon} · อัพเดต {NOW_TH.strftime('%d %b %Y %H:%M')} น.</p>
+<div class='cmd-header'>
+    <div style='display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;'>
+        <div>
+            <h1 class='cmd-title'>🚆 SRT Weather Command Center</h1>
+            <div class='cmd-sub'>ศูนย์เฝ้าระวังปริมาณน้ำฝนและสภาพอากาศ · โครงข่ายรถไฟแห่งประเทศไทย · สำหรับผู้บริหารงานเดินรถ</div>
+        </div>
+        <div style='text-align:right;'>
+            {_live}
+            <div style='color:#9fbcd0;font-size:0.78rem;margin-top:6px;'>📅 {th_datetime(NOW_TH)}</div>
+            <div style='color:#5f8199;font-size:0.74rem;'>พยากรณ์: <b style='color:#38bdf8;'>{sel_day}</b> · {sel_line}</div>
+        </div>
+    </div>
 </div>""", unsafe_allow_html=True)
 
-# Status bar
-_dot = '<span class="dot dot-green"></span>' if _api_ok else '<span class="dot dot-red"></span>'
-_conn_txt = ""
-if _api_ok:
-    _total_st = len(station_data)
-    if _n_fetched == _total_st:
-        _conn_txt = f"· เชื่อมข้อมูลครบ {_n_fetched}/{_total_st} สถานี"
-    else:
-        _conn_txt = f"· เชื่อมข้อมูล {_n_fetched}/{_total_st} สถานี (บางสถานีไม่มีข้อมูล)"
-st.markdown(f"""
-<div style='display:flex;align-items:center;gap:18px;background:rgba(10,20,35,0.7);
-    border:1px solid rgba(91,200,255,0.1);border-radius:8px;padding:8px 18px;
-    margin-bottom:14px;flex-wrap:wrap;'>
-    <span style='font-size:0.8rem;color:#6899b8;'>{_dot}
-        <b style='color:{"#10b981" if _api_ok else "#ef4444"};'>
-            {"✅ TMD NWP API · real-time" if _api_ok else "❌ API ไม่ตอบสนอง"}
-        </b>
-        <span style='color:#4a7090;'>{_conn_txt if _api_ok else (("· " + _api_err) if _api_err else "")}</span>
-    </span>
-    <span style='font-size:0.8rem;color:#6899b8;'>🛤️ สาย: <b style='color:#a8cce0;'>{sel_line}</b></span>
-    <span style='font-size:0.8rem;color:#6899b8;'>📍 สถานี: <b style='color:#a8cce0;'>{len(station_data)}</b></span>
-    <span style='font-size:0.8rem;color:#6899b8;'>📅 พยากรณ์: <b style='color:#a8cce0;'>{sel_horizon}</b></span>
-    <span style='font-size:0.8rem;color:#6899b8;'>🕐 ดึงเมื่อ: <b style='color:#a8cce0;'>{NOW_TH.strftime('%H:%M')} น.</b></span>
-</div>""", unsafe_allow_html=True)
-
-# ── Data coverage banner (ขอบเขตข้อมูลพยากรณ์ที่มีในระบบ) ──────
-if _api_ok and _coverage:
-    _cov = parse_coverage(_coverage)
-    if _cov.get("begin") or _cov.get("end"):
-        _cov_fields = _cov.get("fields") or []
-        _cov_fields_txt = ", ".join(str(f) for f in _cov_fields[:12]) if _cov_fields else "—"
+# ══════════════════════════════════════════════════════════════
+#  EXECUTIVE ALERT BANNER
+# ══════════════════════════════════════════════════════════════
+if not api_ok:
+    st.markdown(f"""
+    <div class='alert-banner ab-warn'>
+        <div class='ab-icon'>🔌</div>
+        <div class='ab-text'><h3>ยังไม่ได้เชื่อมต่อ TMD API</h3>
+        <p>{api_err} — กรุณาใส่ Token ในแถบด้านซ้ายเพื่อเริ่มแสดงข้อมูลพยากรณ์</p></div>
+    </div>""", unsafe_allow_html=True)
+else:
+    if n_crit > 0:
+        crit_names = ", ".join(s["name"] for s in station_data if (s["rain"] or 0)>=90)
         st.markdown(f"""
-        <div style='background:rgba(16,80,60,0.18);border:1px solid rgba(16,185,129,0.3);
-            border-left:4px solid #10b981;border-radius:8px;padding:8px 18px;margin-bottom:14px;
-            font-size:0.8rem;color:#a8cce0;'>
-            📊 <b style='color:#34d399;'>ขอบเขตข้อมูลพยากรณ์รายวันในระบบ TMD:</b>
-            เริ่ม <b style='color:#fff;'>{_cov.get('begin','—')}</b>
-            ถึง <b style='color:#fff;'>{_cov.get('end','—')}</b>
-            {f" · ตัวแปรที่มี: {_cov_fields_txt}" if _cov_fields else ""}
+        <div class='alert-banner ab-crit'>
+            <div class='ab-icon'>🚨</div>
+            <div class='ab-text'><h3>เตือนภัยระดับวิกฤต — ฝนหนักมาก {n_crit} สถานี</h3>
+            <p>สถานีเสี่ยง: {crit_names} · แนะนำตรวจสอบทาง/สะพาน และพิจารณาชะลอการเดินรถ</p></div>
+        </div>""", unsafe_allow_html=True)
+    elif n_heavy > 0:
+        st.markdown(f"""
+        <div class='alert-banner ab-warn'>
+            <div class='ab-icon'>⚠️</div>
+            <div class='ab-text'><h3>เฝ้าระวัง — ฝนหนัก {n_heavy} สถานี</h3>
+            <p>มีฝนตกหนัก 35–90 มม. ในบางช่วงทาง · ติดตามสถานการณ์ใกล้ชิดและเตรียมความพร้อม</p></div>
+        </div>""", unsafe_allow_html=True)
+    else:
+        st.markdown(f"""
+        <div class='alert-banner ab-ok'>
+            <div class='ab-icon'>✅</div>
+            <div class='ab-text'><h3>สถานการณ์ปกติ — ไม่มีฝนตกหนักในเส้นทาง</h3>
+            <p>สภาพอากาศเอื้ออำนวยต่อการเดินรถทุกสาย · เชื่อมข้อมูล {n_fetched}/{len(station_data)} สถานี</p></div>
         </div>""", unsafe_allow_html=True)
 
-# Show diagnostic if API failed
-if not _api_ok and _token():
-    with st.expander("🔍 รายละเอียดข้อผิดพลาด API", expanded=False):
-        st.code(f"""
-URL Base    : {TMD_NWP_BASE}
-Endpoints   : forecast/location/daily/at   (พิกัด lat/lon)
-              forecast/location/daily/place (จังหวัด — fallback)
-Fields      : tc_max,tc_min,rh,rain,cond,ws10m,wd10m
-Auth Header : Bearer {_token()[:30]}...{_token()[-10:]}
-UID (sub)   : {_uid()}
-Error       : {_api_err}
+# ══════════════════════════════════════════════════════════════
+#  KPI ROW
+# ══════════════════════════════════════════════════════════════
+def kpi(col, ico, tag, val, unit, lab, foot, cls):
+    col.markdown(f"""
+    <div class='kpi {cls}'>
+        <div class='kpi-top'><span class='kpi-ico'>{ico}</span><span class='kpi-tag'>{tag}</span></div>
+        <div class='kpi-val'>{val}<small>{unit}</small></div>
+        <div class='kpi-lab'>{lab}</div>
+        <div class='kpi-foot'>{foot}</div>
+    </div>""", unsafe_allow_html=True)
 
-หากเห็น 'Host not in allowlist' = network ภายนอกถูกบล็อก
-หากเห็น HTTP 401/403 = Token ไม่ถูกต้องหรือหมดอายุ
-หากเห็น Timeout = เซิร์ฟเวอร์ TMD ตอบช้าหรือล่ม
-""")
+k = st.columns(6)
+kpi(k[0],"🌧️","สูงสุด", f"{max_rain:.0f}" if max_rain is not None else "—","มม.",
+    "ปริมาณฝนสูงสุด", "ในเส้นทางที่เลือก", "c-cyan")
+kpi(k[1],"📊","เฉลี่ย", f"{avg_rain:.1f}" if avg_rain is not None else "—","มม.",
+    "ฝนเฉลี่ยทุกสถานี", f"รวม {total_rain:.0f} มม." , "c-info")
+kpi(k[2],"🚨","วิกฤต", str(n_crit),"สถานี",
+    "ฝนหนักมาก (>90)", "ต้องระวังสูงสุด", "c-crit")
+kpi(k[3],"⚠️","เสี่ยง", str(n_heavy),"สถานี",
+    "ฝนหนัก (35–90)", "เฝ้าระวัง", "c-warn")
+kpi(k[4],"🌡️","อุณหภูมิ", f"{avg_temp:.0f}" if avg_temp is not None else "—","°C",
+    "อุณหภูมิเฉลี่ยสูงสุด", "ทั้งเครือข่าย", "c-gold")
+kpi(k[5],"📍","ครอบคลุม", f"{n_fetched}","สถานี",
+    f"จาก {len(station_data)} สถานี", "เชื่อมข้อมูลสำเร็จ", "c-ok")
+
+st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════
-#  MAIN TABS
+#  TABS
 # ══════════════════════════════════════════════════════════════
-tab_exec, tab_map, tab_alert, tab_line, tab_forecast = st.tabs([
-    "📊 Executive Dashboard",
-    "🗺️ แผนที่",
-    "⚠️ แจ้งเตือนภัย",
-    "🛤️ รายสาย",
-    "🌤️ พยากรณ์ละเอียด",
-])
+tab_dash, tab_rain, tab_map, tab_lines, tab_detail = st.tabs([
+    "📊 ภาพรวมผู้บริหาร", "🌧️ ปริมาณน้ำฝน", "🗺️ แผนที่", "🛤️ รายสาย", "🔍 เจาะลึกสถานี"])
 
-# ╔══════════════════════════════════════════════════════════╗
-# ║  TAB 1 — EXECUTIVE DASHBOARD                            ║
-# ╚══════════════════════════════════════════════════════════╝
-with tab_exec:
-    # KPI Row
-    _kc = st.columns(6)
-    _kpi_data = [
-        ("🚨","ฝนหนักมาก",str(_n_critical),"สถานี","kpi-red"),
-        ("⛈️","ฝนหนัก",str(_n_heavy),"สถานี","kpi-orange"),
-        ("🌧️","ฝนปานกลาง",str(_n_medium),"สถานี","kpi-blue"),
-        ("☀️","ปกติ/เล็กน้อย",str(_n_ok),"สถานี","kpi-green"),
-        ("💧","ฝนสูงสุด",f"{_max_rain:.1f}" if _max_rain is not None else "—","mm","kpi-gold"),
-        ("🌡️","อุณหภูมิเฉลี่ย",f"{_avg_temp}" if _avg_temp is not None else "—","°C","kpi-purple"),
-    ]
-    for col, (icon, label, val, unit, cls) in zip(_kc, _kpi_data):
-        with col:
+# ╔═══════════════════════════════════════════════════════════╗
+# ║  TAB: EXECUTIVE OVERVIEW                                  ║
+# ╚═══════════════════════════════════════════════════════════╝
+with tab_dash:
+    c1, c2 = st.columns([1.15, 1])
+
+    # — Risk distribution donut-like + line summary —
+    with c1:
+        st.markdown("<div class='panel'><div class='panel-h'>🎯 สรุปความเสี่ยงภาพรวม</div>", unsafe_allow_html=True)
+        total = max(len(station_data), 1)
+        levels = [("🌊 ฝนหนักมาก", n_crit, "#ef4444"),
+                  ("⛈️ ฝนหนัก", n_heavy, "#f59e0b"),
+                  ("🌧️ ฝนปานกลาง", n_med, "#3b82f6"),
+                  ("☀️ ปกติ/เล็กน้อย", n_ok, "#10b981")]
+        for lab, cnt, col in levels:
+            pct = cnt/total*100
             st.markdown(f"""
-            <div class='kpi-card {cls}'>
-                <span class='kpi-icon'>{icon}</span>
-                <div class='kpi-label'>{label}</div>
-                <div class='kpi-value'>{val}<span style='font-size:0.78rem;color:#7ec8e3;margin-left:3px;'>{unit}</span></div>
-            </div>""", unsafe_allow_html=True)
-
-    st.markdown("")
-
-    # Row 2: Risk summary + Bar chart + Top 5
-    _c1, _c2, _c3 = st.columns([1.2, 1.8, 1.8])
-
-    with _c1:
-        st.markdown('<div class="dash-box"><h4>🎯 สรุปความเสี่ยงเส้นทาง</h4>', unsafe_allow_html=True)
-        _total = max(len(station_data), 1)
-        _levels = [
-            ("🚨 ฝนหนักมาก", _n_critical, "#ef4444"),
-            ("⛈️ ฝนหนัก",   _n_heavy,    "#f59e0b"),
-            ("🌧️ ฝนปานกลาง",_n_medium,   "#3b82f6"),
-            ("☀️ ปกติ",      _n_ok,       "#10b981"),
-        ]
-        for lbl, cnt, col in _levels:
-            _pct = cnt / _total * 100
-            st.markdown(f"""
-            <div style='margin:6px 0;'>
-                <div style='display:flex;justify-content:space-between;margin-bottom:3px;'>
-                    <span style='color:#a8cce0;font-size:0.8rem;'>{lbl}</span>
-                    <span style='color:#fff;font-size:0.8rem;font-weight:700;'>{cnt}</span>
+            <div style='margin:9px 0;'>
+                <div style='display:flex;justify-content:space-between;margin-bottom:4px;'>
+                    <span style='color:#9fbcd0;font-size:0.84rem;'>{lab}</span>
+                    <span style='color:#fff;font-weight:700;font-family:Kanit;'>{cnt} <span style='color:#5f8199;font-size:0.78rem;'>({pct:.0f}%)</span></span>
                 </div>
-                <div class='prog-wrap'><div class='prog-fill' style='width:{_pct:.1f}%;background:{col};'></div></div>
+                <div style='background:rgba(255,255,255,0.05);border-radius:8px;height:12px;overflow:hidden;'>
+                    <div style='width:{pct:.1f}%;height:100%;background:{col};border-radius:8px;box-shadow:0 0 10px {col}66;'></div>
+                </div>
             </div>""", unsafe_allow_html=True)
 
-        if _n_critical > 0:
-            _ov_c, _ov_l = "#ef4444", "🚨 วิกฤต"
-        elif _n_heavy > 0:
-            _ov_c, _ov_l = "#f59e0b", "⚠️ ต้องระวัง"
-        elif _n_medium > 0:
-            _ov_c, _ov_l = "#3b82f6", "ℹ️ เฝ้าระวัง"
-        elif _n_ok > 0:
-            _ov_c, _ov_l = "#10b981", "✅ ปกติ"
-        else:
-            _ov_c, _ov_l = "#4a6070", "— ไม่มีข้อมูล"
-
+        # overall verdict
+        if n_crit>0: ov_c,ov_t,ov_d = "#ef4444","🚨 ระดับวิกฤต","ควรพิจารณามาตรการชะลอ/งดเดินรถบางช่วง"
+        elif n_heavy>0: ov_c,ov_t,ov_d = "#f59e0b","⚠️ ต้องเฝ้าระวัง","ติดตามใกล้ชิดและเตรียมความพร้อม"
+        elif n_med>0: ov_c,ov_t,ov_d = "#3b82f6","ℹ️ ปกติ-เฝ้าระวัง","มีฝนปานกลางบางจุด"
+        elif n_ok>0: ov_c,ov_t,ov_d = "#10b981","✅ ปลอดภัย","เดินรถได้ตามปกติทุกสาย"
+        else: ov_c,ov_t,ov_d = "#5f8199","— ไม่มีข้อมูล","รอเชื่อมต่อข้อมูล"
         st.markdown(f"""
-        <div style='margin-top:12px;background:rgba(0,0,0,0.3);border:1px solid {_ov_c};
-            border-radius:8px;padding:10px 14px;text-align:center;'>
-            <div style='color:#6899b8;font-size:0.7rem;font-weight:600;text-transform:uppercase;'>ภาพรวมความเสี่ยง</div>
-            <div style='color:{_ov_c};font-size:1.3rem;font-weight:800;margin-top:3px;'>{_ov_l}</div>
+        <div style='margin-top:14px;background:rgba(0,0,0,0.25);border:1px solid {ov_c};border-radius:12px;padding:14px 18px;'>
+            <div style='display:flex;justify-content:space-between;align-items:center;'>
+                <div><div style='color:#5f8199;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.6px;'>สถานะการเดินรถ (ด้านสภาพอากาศ)</div>
+                <div style='font-family:Kanit;color:{ov_c};font-size:1.4rem;font-weight:700;'>{ov_t}</div></div>
+            </div>
+            <div style='color:#9fbcd0;font-size:0.84rem;margin-top:4px;'>💡 {ov_d}</div>
         </div></div>""", unsafe_allow_html=True)
 
-    with _c2:
-        st.markdown('<div class="dash-box"><h4>🌧️ ปริมาณฝนแยกตามสาย (mm)</h4>', unsafe_allow_html=True)
-        _line_stats = {}
-        for _s in station_data:
-            _ln = _s["line"]
-            if _ln not in _line_stats:
-                _line_stats[_ln] = {"vals":[], "color":_s["line_color"], "icon":_s["line_icon"]}
-            if _s["rain"] is not None:
-                _line_stats[_ln]["vals"].append(_s["rain"])
-
-        _max_bar = max((max(v["vals"]) for v in _line_stats.values() if v["vals"]), default=10)
-        _max_bar = max(_max_bar, 10)
-
-        for _ln_n, _ld in _line_stats.items():
-            _v = _ld["vals"]
-            _mx  = round(max(_v), 1) if _v else None
-            _avg = round(sum(_v)/len(_v), 1) if _v else None
-            _bw  = (_mx / _max_bar * 100) if _mx else 0
-            _bc  = risk_color_hex(_mx)
-            st.markdown(f"""
-            <div style='margin:5px 0;'>
-                <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;'>
-                    <span style='color:#a8cce0;font-size:0.78rem;'>
-                        <span style='color:{_ld["color"]};'>●</span> {_ln_n}
-                    </span>
-                    <span style='color:#fff;font-size:0.78rem;'>
-                        สูงสุด <b>{_mx if _mx is not None else "—"}</b> mm
-                        {" · เฉลี่ย " + str(_avg) if _avg is not None else ""}
-                    </span>
-                </div>
-                <div class='prog-wrap'><div class='prog-fill' style='width:{_bw:.1f}%;background:{_bc};'></div></div>
-            </div>""", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with _c3:
-        st.markdown('<div class="dash-box"><h4>🚨 สถานีเสี่ยงสูงสุด TOP 5</h4>', unsafe_allow_html=True)
-        _top5 = sorted([s for s in station_data if s["rain"] is not None],
-                        key=lambda x: x["rain"], reverse=True)[:5]
-        if not _top5:
-            st.markdown("<p style='color:#4a6070;font-size:0.82rem;margin:8px 0;'>"
-                        "ไม่มีข้อมูลฝน — อาจยังไม่ได้รับข้อมูลจาก TMD</p>", unsafe_allow_html=True)
+    # — Top risk stations —
+    with c2:
+        st.markdown("<div class='panel'><div class='panel-h'>🚨 สถานีเสี่ยงสูงสุด</div>", unsafe_allow_html=True)
+        top = sorted([s for s in station_data if s["rain"] is not None],
+                     key=lambda x:x["rain"], reverse=True)[:6]
+        if not top:
+            st.markdown("<p style='color:#5f8199;font-size:0.84rem;'>ยังไม่มีข้อมูลปริมาณฝน</p>", unsafe_allow_html=True)
         else:
-            for i, _s in enumerate(_top5, 1):
-                _rc = risk_color_hex(_s["rain"])
-                _lbl, _em, _, _ = risk_class(_s["rain"])
+            for i, s in enumerate(top, 1):
+                lv,lab,em,hx,bc = rain_risk(s["rain"])
                 st.markdown(f"""
-                <div style='display:flex;align-items:center;gap:10px;padding:7px 0;
-                    border-bottom:1px solid rgba(91,200,255,0.06);'>
-                    <span style='color:#4a6070;font-size:0.85rem;font-weight:800;width:18px;'>{i}</span>
-                    <div style='flex:1;min-width:0;'>
-                        <div style='color:#d0e8f8;font-size:0.82rem;font-weight:600;
-                            overflow:hidden;text-overflow:ellipsis;'>{_em} {_s["name"]}</div>
-                        <div style='color:#4a7090;font-size:0.7rem;'>{_s["province"]} · {_s["line"]}</div>
+                <div class='risk-item'>
+                    <div class='risk-rank'>{i}</div>
+                    <div class='risk-body'>
+                        <div class='risk-stn'>{em} {s['name']}</div>
+                        <div class='risk-meta'>{s['province']} · {s['line']} · กม.{s.get('km',0)}</div>
                     </div>
-                    <div style='text-align:right;min-width:55px;'>
-                        <div style='color:{_rc};font-size:1.05rem;font-weight:800;'>{_s["rain"]:.1f}</div>
-                        <div style='color:#4a7090;font-size:0.68rem;'>mm</div>
+                    <div style='text-align:right;'>
+                        <div class='risk-num' style='color:{hx};'>{s['rain']:.0f}<span style='font-size:0.7rem;color:#5f8199;'> มม.</span></div>
+                        <span class='bdg {bc}'>{lab}</span>
                     </div>
                 </div>""", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("")
+    st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
 
-    # Summary table
-    st.markdown('<div class="sec-title">📋 ตารางสรุปทุกสถานี (พยากรณ์' + sel_horizon + ')</div>',
-                unsafe_allow_html=True)
-    _rows = []
-    for _s in sorted(station_data, key=lambda x: x["rain"] if x["rain"] is not None else -1, reverse=True):
-        _lbl, _em, _, _ = risk_class(_s["rain"])
-        _rows.append({
-            "สาย": f"{_s['line_icon']} {_s['line_short']}",
-            "สถานี": _s["name"],
-            "จังหวัด": _s["province"],
-            "ฝน (mm)": round(_s["rain"], 1) if _s["rain"] is not None else None,
-            "ระดับ": f"{_em} {_lbl}",
-            "Tmax (°C)": round(_s["tc_max"], 1) if _s["tc_max"] is not None else None,
-            "Tmin (°C)": round(_s["tc_min"], 1) if _s["tc_min"] is not None else None,
-            "RH (%)": round(_s["rh"], 0) if _s["rh"] is not None else None,
-            "ลม (m/s)": round(_s["ws"], 1) if _s["ws"] is not None else None,
-            "สภาพอากาศ": cond_text(_s["cond"]) if _s["cond"] is not None else "—",
-        })
+    # — Per-line rainfall bars —
+    st.markdown("<div class='panel'><div class='panel-h'>🌧️ ปริมาณน้ำฝนเฉลี่ย/สูงสุด แยกตามสายทาง</div>", unsafe_allow_html=True)
+    line_stat = {}
+    for s in station_data:
+        L = s["line"]
+        line_stat.setdefault(L, {"vals":[], "color":s["line_color"], "icon":s["line_icon"]})
+        if s["rain"] is not None: line_stat[L]["vals"].append(s["rain"])
+    maxbar = max((max(v["vals"]) for v in line_stat.values() if v["vals"]), default=10)
+    maxbar = max(maxbar, 10)
+    for L, st_ in line_stat.items():
+        v = st_["vals"]
+        mx = max(v) if v else 0
+        av = sum(v)/len(v) if v else 0
+        w = mx/maxbar*100 if mx else 0
+        hx = rain_hex(mx)
+        st.markdown(f"""
+        <div class='rain-row'>
+            <div class='rain-name'>{st_['icon']} {L}</div>
+            <div class='rain-track'>
+                <div class='rain-fill' style='width:{w:.1f}%;background:linear-gradient(90deg,{hx}99,{hx});'>
+                    <span style='font-size:0.7rem;color:#fff;font-weight:700;'>{("เฉลี่ย "+format(av,'.0f')) if av else ""}</span>
+                </div>
+            </div>
+            <div class='rain-val' style='color:{hx};'>{mx:.0f}</div>
+        </div>""", unsafe_allow_html=True)
+    st.markdown("<div style='color:#5f8199;font-size:0.74rem;margin-top:8px;'>แถบแสดงปริมาณฝนสูงสุดของแต่ละสาย (มม.) · ตัวเลขในแถบคือค่าเฉลี่ย</div></div>", unsafe_allow_html=True)
 
-    if _rows:
-        _df = pd.DataFrame(_rows)
-        st.dataframe(_df, use_container_width=True, hide_index=True, height=380,
-            column_config={
-                "ฝน (mm)":   st.column_config.NumberColumn("🌧️ ฝน (mm)",  format="%.1f"),
-                "Tmax (°C)": st.column_config.NumberColumn("🌡️ Tmax",     format="%.1f"),
-                "Tmin (°C)": st.column_config.NumberColumn("❄️ Tmin",      format="%.1f"),
-                "RH (%)":    st.column_config.NumberColumn("💧 RH%",       format="%.0f"),
-                "ลม (m/s)":  st.column_config.NumberColumn("💨 ลม",        format="%.1f"),
-            })
+# ╔═══════════════════════════════════════════════════════════╗
+# ║  TAB: RAINFALL FOCUS                                      ║
+# ╚═══════════════════════════════════════════════════════════╝
+with tab_rain:
+    st.markdown("<div class='sec-label'>ปริมาณน้ำฝนรายสถานี — เรียงจากมากไปน้อย</div>", unsafe_allow_html=True)
 
+    ranked = sorted(station_data, key=lambda x: x["rain"] if x["rain"] is not None else -1, reverse=True)
+    maxr = max([r for r in rains], default=10) or 10
 
-# ╔══════════════════════════════════════════════════════════╗
-# ║  TAB 2 — MAP                                            ║
-# ╚══════════════════════════════════════════════════════════╝
+    colL, colR = st.columns(2)
+    half = (len(ranked)+1)//2
+    for ci, chunk in enumerate([ranked[:half], ranked[half:]]):
+        with (colL if ci==0 else colR):
+            for s in chunk:
+                lv,lab,em,hx,bc = rain_risk(s["rain"])
+                rv = s["rain"]
+                w = (rv/maxr*100) if rv else 0
+                rain_disp = f"{rv:.1f}" if rv is not None else "—"
+                st.markdown(f"""
+                <div style='background:#0e1a29;border:1px solid #1c3247;border-radius:10px;padding:10px 14px;margin:5px 0;'>
+                    <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;'>
+                        <span style='color:#e8f1f8;font-size:0.86rem;font-weight:600;'>{em} {s['name']}</span>
+                        <span style='font-family:Kanit;font-weight:700;color:{hx};font-size:1rem;'>{rain_disp}<span style='font-size:0.7rem;color:#5f8199;'> มม.</span></span>
+                    </div>
+                    <div style='background:rgba(255,255,255,0.05);border-radius:6px;height:8px;overflow:hidden;'>
+                        <div style='width:{w:.1f}%;height:100%;background:{hx};border-radius:6px;'></div>
+                    </div>
+                    <div style='display:flex;justify-content:space-between;margin-top:5px;'>
+                        <span style='color:#5f8199;font-size:0.72rem;'>{s['line_short']} · {s['province']}</span>
+                        <span class='bdg {bc}' style='font-size:0.66rem;'>{lab}</span>
+                    </div>
+                </div>""", unsafe_allow_html=True)
+
+    # rainfall criteria reference
+    st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='panel'><div class='panel-h'>📋 เกณฑ์ปริมาณน้ำฝน (กรมอุตุนิยมวิทยา) และคำแนะนำการเดินรถ</div>", unsafe_allow_html=True)
+    crit_rows = [
+        ("☀️","ไม่มีฝน / เล็กน้อย","0–10 มม./วัน","#10b981","เดินรถปกติ"),
+        ("🌧️","ฝนปานกลาง","10–35 มม./วัน","#3b82f6","เฝ้าระวัง ตรวจสอบทางตามปกติ"),
+        ("⛈️","ฝนหนัก","35–90 มม./วัน","#f59e0b","ลดความเร็ว ตรวจสอบจุดเสี่ยงน้ำท่วม/ดินสไลด์"),
+        ("🌊","ฝนหนักมาก","> 90 มม./วัน","#ef4444","พิจารณาชะลอ/งดเดินรถ ตรวจสอบสะพานและคันทาง"),
+    ]
+    for em,lab,rng,hx,act in crit_rows:
+        st.markdown(f"""
+        <div style='display:grid;grid-template-columns:40px 150px 130px 1fr;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid rgba(28,50,71,0.4);'>
+            <span style='font-size:1.3rem;'>{em}</span>
+            <span style='color:{hx};font-weight:700;font-size:0.86rem;'>{lab}</span>
+            <span style='color:#9fbcd0;font-size:0.82rem;'>{rng}</span>
+            <span style='color:#9fbcd0;font-size:0.82rem;'>💡 {act}</span>
+        </div>""", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ╔═══════════════════════════════════════════════════════════╗
+# ║  TAB: MAP                                                 ║
+# ╚═══════════════════════════════════════════════════════════╝
 with tab_map:
-    st.markdown('<div class="sec-title">🗺️ แผนที่โครงข่ายรถไฟและสภาพอากาศ</div>', unsafe_allow_html=True)
+    st.markdown("<div class='sec-label'>แผนที่โครงข่าย — สีหมุดตามระดับปริมาณน้ำฝน</div>", unsafe_allow_html=True)
     try:
         import folium
         from streamlit_folium import st_folium
-
-        _m = folium.Map(location=[13.5, 101.5], zoom_start=6, tiles=None)
-        folium.TileLayer(
-            tiles="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-            attr="© OpenStreetMap © CARTO", name="Dark", max_zoom=19,
-        ).add_to(_m)
-
-        # Draw lines
-        for _ln, _ld in SRT_LINES.items():
-            if sel_line != "ทุกสาย" and _ln != sel_line:
-                continue
-            _coords = [[s["lat"], s["lon"]] for s in _ld["stations"]]
-            folium.PolyLine(_coords, color=_ld["color"], weight=3.5, opacity=0.85,
-                            tooltip=f"{_ln} — {_ld['desc']}").add_to(_m)
-
-        # Markers
-        for _s in station_data:
-            _rc = risk_color_hex(_s["rain"])
-            _lbl, _em, _, _ = risk_class(_s["rain"])
-            _ic_col = {"#ef4444":"red","#f59e0b":"orange","#3b82f6":"blue",
-                        "#10b981":"green","#4a6070":"gray"}.get(_rc, "blue")
-            # Precompute display strings (avoid nested f-strings)
-            _v_rain = "{:.1f} mm".format(_s["rain"]) if _s["rain"] is not None else "N/A"
-            _v_tmax = "{:.1f}°C".format(_s["tc_max"]) if _s["tc_max"] is not None else "N/A"
-            _v_tmin = "{:.1f}°C".format(_s["tc_min"]) if _s["tc_min"] is not None else "N/A"
-            _v_rh   = "{:.0f}%".format(_s["rh"]) if _s["rh"] is not None else "N/A"
-            _v_cond = cond_text(_s["cond"]) if _s["cond"] is not None else "N/A"
-            _popup_html = (
-                "<div style='font-family:Sarabun,sans-serif;min-width:180px;'>"
-                f"<b style='font-size:0.95rem;color:#111;'>{_s['name']}</b><br>"
-                f"<span style='color:#555;font-size:0.78rem;'>{_s['province']} · {_s['line']}</span>"
-                "<hr style='margin:5px 0;border-color:#ddd;'>"
-                "<table style='font-size:0.78rem;width:100%;'>"
-                f"<tr><td>🌧️ ฝน</td><td><b>{_v_rain}</b></td></tr>"
-                f"<tr><td>⚠️ ระดับ</td><td>{_em} {_lbl}</td></tr>"
-                f"<tr><td>🌡️ Tmax</td><td>{_v_tmax}</td></tr>"
-                f"<tr><td>❄️ Tmin</td><td>{_v_tmin}</td></tr>"
-                f"<tr><td>💧 RH</td><td>{_v_rh}</td></tr>"
-                f"<tr><td>☁️ สภาพ</td><td>{_v_cond}</td></tr>"
-                "</table></div>"
-            )
-            _tt = "{} {} {}".format(
-                _s["name"], _em,
-                "{:.1f}mm".format(_s["rain"]) if _s["rain"] is not None else ""
-            )
-            folium.Marker(
-                location=[_s["lat"], _s["lon"]],
-                popup=folium.Popup(_popup_html, max_width=260),
-                tooltip=_tt,
-                icon=folium.Icon(color=_ic_col, icon="train", prefix="fa"),
-            ).add_to(_m)
-
-        st.caption("🖱️ คลิกไอคอนสถานีเพื่อดูข้อมูล · 🔴 ฝนหนักมาก · 🟠 ฝนหนัก · 🔵 ฝนปานกลาง · 🟢 ปกติ")
-        st_folium(_m, width="100%", height=580, returned_objects=[])
-
+        m = folium.Map(location=[13.5,101.5], zoom_start=6, tiles=None)
+        folium.TileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+                         attr="© CARTO", name="Dark", max_zoom=19).add_to(m)
+        for ln, ld in SRT_LINES.items():
+            if sel_line!="ทุกสาย" and ln!=sel_line: continue
+            coords=[[s["lat"],s["lon"]] for s in ld["stations"]]
+            folium.PolyLine(coords, color=ld["color"], weight=3.5, opacity=0.8, tooltip=ln).add_to(m)
+        for s in station_data:
+            lv,lab,em,hx,bc = rain_risk(s["rain"])
+            ic = {"#ef4444":"red","#f59e0b":"orange","#3b82f6":"blue","#22c55e":"green",
+                  "#10b981":"green","#5f8199":"gray"}.get(hx,"blue")
+            rv = f"{s['rain']:.1f} มม." if s["rain"] is not None else "N/A"
+            tx = f"{s['tc_max']:.0f}/{s['tc_min']:.0f}°C" if s["tc_max"] is not None and s["tc_min"] is not None else "N/A"
+            cd = cond_text(s["cond"]) if s["cond"] is not None else "N/A"
+            pop = (f"<div style='font-family:Sarabun;min-width:170px;'>"
+                   f"<b style='font-size:0.95rem;'>{s['name']}</b><br>"
+                   f"<span style='color:#666;font-size:0.78rem;'>{s['province']} · {s['line']}</span><hr style='margin:5px 0;'>"
+                   f"<b>🌧️ ฝน: {rv}</b><br>⚠️ {em} {lab}<br>🌡️ {tx}<br>☁️ {cd}</div>")
+            folium.Marker([s["lat"],s["lon"]], popup=folium.Popup(pop,max_width=240),
+                          tooltip=f"{s['name']} · {rv}",
+                          icon=folium.Icon(color=ic, icon="train", prefix="fa")).add_to(m)
+        st.caption("🔴 ฝนหนักมาก · 🟠 ฝนหนัก · 🔵 ฝนปานกลาง · 🟢 ปกติ — คลิกหมุดเพื่อดูรายละเอียด")
+        st_folium(m, width="100%", height=560, returned_objects=[])
     except ImportError:
-        st.warning("⚠️ ติดตั้ง `folium` และ `streamlit-folium` เพื่อแสดงแผนที่")
-        _mdf = pd.DataFrame([{
-            "lat":_s["lat"],"lon":_s["lon"],"สถานี":_s["name"]
-        } for _s in station_data])
-        if not _mdf.empty:
-            st.map(_mdf, latitude="lat", longitude="lon", use_container_width=True)
+        mdf = pd.DataFrame([{"lat":s["lat"],"lon":s["lon"]} for s in station_data])
+        if not mdf.empty: st.map(mdf, latitude="lat", longitude="lon")
 
-
-# ╔══════════════════════════════════════════════════════════╗
-# ║  TAB 3 — ALERTS                                         ║
-# ╚══════════════════════════════════════════════════════════╝
-with tab_alert:
-    _ac, _bc = st.columns([1.6, 1])
-
-    with _ac:
-        st.markdown('<div class="sec-title">🚨 สถานีที่ต้องเฝ้าระวัง</div>', unsafe_allow_html=True)
-        _alerts = sorted([s for s in station_data if (s["rain"] or 0) >= _min_rain],
-                          key=lambda x: x["rain"] or 0, reverse=True)
-        if _alerts:
-            for _s in _alerts:
-                _lbl, _em, _, _alc = risk_class(_s["rain"])
-                _cond_txt = cond_text(_s["cond"]) if _s["cond"] is not None else ""
-                st.markdown(f"""
-                <div class='alert-card {_alc}'>
-                    <div style='display:flex;justify-content:space-between;align-items:flex-start;gap:14px;'>
-                        <div style='flex:1;min-width:0;'>
-                            <div class='alert-card-title'>{_em} {_s['name']}
-                                <span style='color:{_s["line_color"]};font-size:0.74rem;
-                                    font-weight:600;margin-left:8px;'>
-                                    [{_s["line_short"]}] {_s["line"]}
-                                </span>
-                            </div>
-                            <div class='alert-card-body'>
-                                📍 {_s['province']} · กม. {_s.get('km',0)}
-                                {f" · 🌧️ <b>{_s['rain']:.1f} mm</b>" if _s["rain"] is not None else ""}
-                                {f" · 🌡️ {_s['tc_max']:.1f}/{_s['tc_min']:.1f}°C" if _s["tc_max"] is not None else ""}
-                                {f" · 💧 {_s['rh']:.0f}%" if _s["rh"] is not None else ""}
-                                {f" · 💨 {_s['ws']:.1f} m/s" if _s["ws"] is not None else ""}
-                                {f"<br>☁️ {_cond_txt}" if _cond_txt else ""}
-                            </div>
-                        </div>
-                        <div style='text-align:right;min-width:70px;'>
-                            <div style='color:#fff;font-size:1.5rem;font-weight:800;line-height:1;'>
-                                {f"{_s['rain']:.0f}" if _s["rain"] is not None else "—"}
-                            </div>
-                            <div style='color:#6899b8;font-size:0.7rem;'>mm</div>
-                        </div>
-                    </div>
-                </div>""", unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div class='alert-card alert-ok'>
-                <div class='alert-card-title'>✅ ไม่มีสถานีเกินเกณฑ์ ({sel_thresh})</div>
-                <div class='alert-card-body'>
-                    สภาพอากาศปกติทุกสถานีในเส้นทางที่เลือก
-                    {" · หรือยังไม่ได้รับข้อมูลจาก TMD" if not _api_ok else ""}
-                </div>
-            </div>""", unsafe_allow_html=True)
-
-    with _bc:
-        st.markdown('<div class="sec-title">📋 เกณฑ์ฝน (TMD)</div>', unsafe_allow_html=True)
-        for _em, _lv, _mm, _cls in [
-            ("🌦️","ฝนเล็กน้อย","< 10 mm/วัน","alert-ok"),
-            ("🌧️","ฝนปานกลาง","10–35 mm/วัน","alert-info"),
-            ("⛈️","ฝนหนัก","35–90 mm/วัน","alert-warning"),
-            ("🌊","ฝนหนักมาก","> 90 mm/วัน","alert-critical"),
-        ]:
-            st.markdown(f"""
-            <div class='alert-card {_cls}' style='padding:8px 14px;'>
-                <div class='alert-card-body'>{_em} <b>{_lv}</b> — {_mm}</div>
-            </div>""", unsafe_allow_html=True)
-
-        st.markdown('<div class="sec-title">⚠️ คำแนะนำเมื่อฝนตกหนัก</div>', unsafe_allow_html=True)
-        st.markdown("""
-        <div class='alert-card alert-warning'>
-            <div class='alert-card-body'>
-            • ตรวจสอบทางและสะพานก่อนเดินรถ<br>
-            • ระวังดินถล่ม โดยเฉพาะภาคเหนือและภาคใต้<br>
-            • ลดความเร็วเมื่อมีน้ำท่วมราง<br>
-            • ติดต่อศูนย์ควบคุมการเดินรถทันทีหากพบความผิดปกติ
-            </div>
-        </div>""", unsafe_allow_html=True)
-
-
-# ╔══════════════════════════════════════════════════════════╗
-# ║  TAB 4 — PER LINE                                       ║
-# ╚══════════════════════════════════════════════════════════╝
-with tab_line:
-    _lines_show = [sel_line] if sel_line != "ทุกสาย" else list(SRT_LINES.keys())
-    for _ln in _lines_show:
-        _ld = SRT_LINES[_ln]
-        _ln_stns = [s for s in station_data if s["line"] == _ln]
-        _ln_r = [s["rain"] for s in _ln_stns if s["rain"] is not None]
-        _ln_max = max(_ln_r) if _ln_r else None
-        _ln_avg = round(sum(_ln_r)/len(_ln_r), 1) if _ln_r else None
-        _ln_heavy = sum(1 for r in _ln_r if r >= 35)
-
-        _title = (f"{_ld['icon']} {_ln} — {_ld['desc']}  |  "
-                  f"{'🚨 ' + str(_ln_heavy) + ' สถานีเสี่ยง' if _ln_heavy else '✅ ปกติ'}")
-        with st.expander(_title, expanded=(sel_line != "ทุกสาย")):
-            _mc = st.columns(4)
-            with _mc[0]: st.metric("🌧️ ฝนสูงสุด", f"{_ln_max:.1f} mm" if _ln_max is not None else "—")
-            with _mc[1]: st.metric("📊 ฝนเฉลี่ย", f"{_ln_avg} mm" if _ln_avg is not None else "—")
-            with _mc[2]: st.metric("⛈️ สถานีเสี่ยง", f"{_ln_heavy}")
-            with _mc[3]: st.metric("📍 สถานี", f"{len(_ln_stns)}")
-
-            # Station rows
-            _tbl_rows = []
-            for _s in _ln_stns:
-                _lbl, _em, _, _ = risk_class(_s["rain"])
-                _tbl_rows.append({
-                    "กม.": _s.get("km", 0),
-                    "สถานี": f"🚉 {_s['name']}",
-                    "จังหวัด": _s["province"],
-                    "ฝน (mm)": round(_s["rain"], 1) if _s["rain"] is not None else None,
-                    "ระดับ": f"{_em} {_lbl}",
-                    "Tmax/Tmin": f"{_s['tc_max']:.0f}°/{_s['tc_min']:.0f}°"
-                                  if _s["tc_max"] is not None and _s["tc_min"] is not None else "—",
-                    "RH%": round(_s["rh"], 0) if _s["rh"] is not None else None,
-                    "สภาพ": cond_text(_s["cond"]) if _s["cond"] is not None else "—",
+# ╔═══════════════════════════════════════════════════════════╗
+# ║  TAB: PER LINE                                            ║
+# ╚═══════════════════════════════════════════════════════════╝
+with tab_lines:
+    lines_show = [sel_line] if sel_line!="ทุกสาย" else list(SRT_LINES.keys())
+    for ln in lines_show:
+        ld = SRT_LINES[ln]
+        lstn = [s for s in station_data if s["line"]==ln]
+        lr = [s["rain"] for s in lstn if s["rain"] is not None]
+        lmax = max(lr) if lr else None
+        lavg = sum(lr)/len(lr) if lr else None
+        lheavy = sum(1 for r in lr if r>=35)
+        title = f"{ld['icon']} {ln} — {ld['desc']}   |   {'🚨 '+str(lheavy)+' สถานีเสี่ยง' if lheavy else '✅ ปกติ'}"
+        with st.expander(title, expanded=(sel_line!="ทุกสาย")):
+            mc = st.columns(4)
+            mc[0].metric("🌧️ ฝนสูงสุด", f"{lmax:.0f} มม." if lmax is not None else "—")
+            mc[1].metric("📊 ฝนเฉลี่ย", f"{lavg:.1f} มม." if lavg is not None else "—")
+            mc[2].metric("⛈️ สถานีเสี่ยง", f"{lheavy} สถานี")
+            mc[3].metric("📍 สถานีทั้งหมด", f"{len(lstn)} สถานี")
+            rows=[]
+            for s in lstn:
+                lv,lab,em,hx,bc = rain_risk(s["rain"])
+                rows.append({
+                    "กม.":s.get("km",0),
+                    "สถานี":f"🚉 {s['name']}",
+                    "จังหวัด":s["province"],
+                    "ฝน (มม.)":round(s["rain"],1) if s["rain"] is not None else None,
+                    "ระดับ":f"{em} {lab}",
+                    "Tmax/Tmin":f"{s['tc_max']:.0f}/{s['tc_min']:.0f}°" if s["tc_max"] is not None and s["tc_min"] is not None else "—",
+                    "RH%":round(s["rh"],0) if s["rh"] is not None else None,
+                    "สภาพอากาศ":cond_text(s["cond"]) if s["cond"] is not None else "—",
                 })
-            if _tbl_rows:
-                st.dataframe(pd.DataFrame(_tbl_rows), use_container_width=True, hide_index=True,
-                    column_config={
-                        "ฝน (mm)": st.column_config.NumberColumn("🌧️ ฝน", format="%.1f"),
-                        "RH%": st.column_config.NumberColumn("💧 RH%", format="%.0f"),
-                    })
+            if rows:
+                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True,
+                    column_config={"ฝน (มม.)":st.column_config.NumberColumn("🌧️ ฝน (มม.)",format="%.1f"),
+                                   "RH%":st.column_config.NumberColumn("💧 RH%",format="%.0f")})
 
-
-# ╔══════════════════════════════════════════════════════════╗
-# ║  TAB 5 — DETAILED FORECAST                              ║
-# ╚══════════════════════════════════════════════════════════╝
-with tab_forecast:
-    st.markdown('<div class="sec-title">🌤️ พยากรณ์อากาศแบบละเอียดรายสถานี</div>',
-                unsafe_allow_html=True)
-    _sel_stn_name = st.selectbox(
-        "เลือกสถานี",
-        [s["name"] for s in station_data] if station_data else ["—"],
-        key="forecast_station_select",
-    )
-    _sel_stn = next((s for s in station_data if s["name"] == _sel_stn_name), None)
-
-    if _sel_stn and _api_ok:
-        _h_col, _d_col = st.columns(2)
-
-        # Daily 3-day
-        with _d_col:
-            st.markdown('<div class="dash-box"><h4>📅 พยากรณ์ 3 วันข้างหน้า</h4>', unsafe_allow_html=True)
-            with st.spinner("กำลังโหลดพยากรณ์..."):
-                _d_data = fetch_daily_at(_sel_stn["lat"], _sel_stn["lon"], _token(), days=3)
-                _d_fc = parse_daily_forecast(_d_data)
-                if not _d_fc and _sel_stn.get("province"):
-                    _d_data = fetch_daily_place(_sel_stn["province"], _token(), days=3)
-                    _d_fc = parse_daily_forecast(_d_data)
-            if _d_fc:
-                _drows = []
-                for f in _d_fc:
-                    _drows.append({
-                        "วันที่": f["time"][:10] if f["time"] else "",
-                        "ฝน (mm)": round(f["rain"],1) if f["rain"] is not None else None,
-                        "Tmax/Tmin": (f"{f['tc_max']:.0f}/{f['tc_min']:.0f}°C"
-                                       if f["tc_max"] is not None and f["tc_min"] is not None else "—"),
-                        "RH%": round(f["rh"],0) if f["rh"] is not None else None,
-                        "สภาพอากาศ": cond_text(f["cond"]) if f["cond"] is not None else "—",
-                    })
-                st.dataframe(pd.DataFrame(_drows), use_container_width=True, hide_index=True)
+# ╔═══════════════════════════════════════════════════════════╗
+# ║  TAB: STATION DEEP-DIVE                                   ║
+# ╚═══════════════════════════════════════════════════════════╝
+with tab_detail:
+    st.markdown("<div class='sec-label'>เจาะลึกพยากรณ์รายสถานี</div>", unsafe_allow_html=True)
+    if not api_ok:
+        st.info("ℹ️ ต้องเชื่อมต่อ TMD API ก่อน")
+    else:
+        names = [s["name"] for s in station_data]
+        sel_stn = st.selectbox("เลือกสถานี", names) if names else None
+        stn = next((s for s in station_data if s["name"]==sel_stn), None)
+        if stn:
+            # 7-day outlook from series
+            series = stn.get("series", [])
+            st.markdown(f"<div class='panel'><div class='panel-h'>📅 แนวโน้ม 7 วัน — {stn['name']} ({stn['province']})</div>", unsafe_allow_html=True)
+            if series:
+                day_cols = st.columns(min(len(series),7))
+                for i, f in enumerate(series[:7]):
+                    lv,lab,em,hx,bc = rain_risk(f["rain"])
+                    tdate = f["time"][5:10] if len(f["time"])>=10 else f"+{i}"
+                    rain_d = f"{f['rain']:.0f}" if f["rain"] is not None else "—"
+                    temp_d = f"{f['tc_max']:.0f}°" if f["tc_max"] is not None else "—"
+                    with day_cols[i]:
+                        st.markdown(f"""
+                        <div style='background:#0e1a29;border:1px solid #1c3247;border-top:3px solid {hx};
+                            border-radius:10px;padding:10px 6px;text-align:center;'>
+                            <div style='color:#5f8199;font-size:0.7rem;'>{tdate}</div>
+                            <div style='font-size:1.6rem;margin:4px 0;'>{cond_emoji(f['cond'])}</div>
+                            <div style='font-family:Kanit;color:{hx};font-weight:700;font-size:1.1rem;'>{rain_d}</div>
+                            <div style='color:#5f8199;font-size:0.66rem;'>มม.</div>
+                            <div style='color:#9fbcd0;font-size:0.74rem;margin-top:3px;'>🌡️ {temp_d}</div>
+                        </div>""", unsafe_allow_html=True)
             else:
-                st.info("ไม่มีข้อมูลพยากรณ์รายวัน")
+                st.info("ไม่มีข้อมูลแนวโน้มรายวัน")
             st.markdown("</div>", unsafe_allow_html=True)
 
-        # Hourly 24h
-        with _h_col:
-            st.markdown('<div class="dash-box"><h4>🕐 พยากรณ์ราย ชม. (24 ชม.)</h4>', unsafe_allow_html=True)
-            with st.spinner("กำลังโหลดพยากรณ์ราย ชม..."):
-                _h_data = fetch_hourly_at(_sel_stn["lat"], _sel_stn["lon"], _token(), hours=24)
-                _h_fc = parse_hourly_forecast(_h_data)
-                if not _h_fc and _sel_stn.get("province"):
-                    _h_data = fetch_hourly_place(_sel_stn["province"], _token(), hours=24)
-                    _h_fc = parse_hourly_forecast(_h_data)
-            if _h_fc:
-                _hrows = []
-                for f in _h_fc:
-                    _t = f["time"]
-                    _hh = _t[11:16] if len(_t) >= 16 else _t
-                    _hrows.append({
-                        "เวลา": _hh,
-                        "อุณหภูมิ (°C)": round(f["tc"],1) if f["tc"] is not None else None,
-                        "ฝน (mm)":      round(f["rain"],1) if f["rain"] is not None else None,
-                        "RH%":          round(f["rh"],0) if f["rh"] is not None else None,
-                        "ลม (m/s)":     round(f["ws"],1) if f["ws"] is not None else None,
-                    })
-                st.dataframe(pd.DataFrame(_hrows), use_container_width=True, hide_index=True, height=380)
+            # Hourly 24h
+            st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='panel'><div class='panel-h'>🕐 พยากรณ์ราย 24 ชั่วโมง</div>", unsafe_allow_html=True)
+            with st.spinner("กำลังโหลด..."):
+                hd = fetch_hourly_at(stn["lat"], stn["lon"], _token(), hours=24)
+                hf = parse_hourly(hd)
+                if not hf and stn.get("province"):
+                    hd = fetch_hourly_place(stn["province"], _token(), hours=24)
+                    hf = parse_hourly(hd)
+            if hf:
+                hrows=[]
+                for f in hf:
+                    t=f["time"]; hh=t[11:16] if len(t)>=16 else t
+                    hrows.append({"เวลา":hh,
+                        "🌡️ อุณหภูมิ (°C)":round(f["tc"],1) if f["tc"] is not None else None,
+                        "🌧️ ฝน (มม.)":round(f["rain"],1) if f["rain"] is not None else None,
+                        "💧 RH%":round(f["rh"],0) if f["rh"] is not None else None,
+                        "💨 ลม (m/s)":round(f["ws"],1) if f["ws"] is not None else None,
+                        "☁️ สภาพ":cond_text(f["cond"]) if f["cond"] is not None else "—"})
+                st.dataframe(pd.DataFrame(hrows), use_container_width=True, hide_index=True, height=420)
             else:
                 st.info("ไม่มีข้อมูลพยากรณ์ราย ชม.")
             st.markdown("</div>", unsafe_allow_html=True)
-    elif not _api_ok:
-        st.info("ℹ️ ต้องเชื่อมต่อ TMD API ก่อนเพื่อดูพยากรณ์ละเอียด — ใส่ Token ใน Sidebar")
-
-    # ── พยากรณ์รายภูมิภาค (endpoint /daily/region) ────────────────
-    st.markdown('<div class="sec-title">🌏 พยากรณ์รายภูมิภาค (ทุกจังหวัดในภาค)</div>',
-                unsafe_allow_html=True)
-    _REGION_OPTS = {
-        "ภาคเหนือ": "N", "ภาคตะวันออกเฉียงเหนือ": "NE", "ภาคกลาง": "C",
-        "ภาคตะวันออก": "E", "ภาคใต้ฝั่งตะวันออก": "S", "ภาคใต้ฝั่งตะวันตก": "W",
-    }
-    _sel_region_name = st.selectbox("เลือกภูมิภาค", list(_REGION_OPTS.keys()),
-                                     key="region_select")
-    if _api_ok:
-        _rcode = _REGION_OPTS[_sel_region_name]
-        with st.spinner(f"กำลังโหลดพยากรณ์{_sel_region_name}..."):
-            _rdata = fetch_daily_region(_rcode, _token(), days=3)
-        # region คืน list หลายจังหวัด
-        _rprov = []
-        if _rdata and isinstance(_rdata, dict):
-            _rprov = _rdata.get("WeatherForecasts") or _rdata.get("forecasts") or []
-        if _rprov:
-            _rrows = []
-            for _p in _rprov:
-                _loc = _p.get("location", {}) if isinstance(_p, dict) else {}
-                _pname = _scalar(_pick(_loc, "province", "name", "amphoe")) or "—"
-                _pf = _p.get("forecasts", []) if isinstance(_p, dict) else []
-                _today_f = _pf[0].get("data", {}) if _pf else {}
-                _rrows.append({
-                    "จังหวัด": _pname,
-                    "ฝน (mm)": _to_float(_pick(_today_f, "rain")),
-                    "Tmax (°C)": _to_float(_pick(_today_f, "tc_max")),
-                    "Tmin (°C)": _to_float(_pick(_today_f, "tc_min")),
-                    "RH%": _to_float(_pick(_today_f, "rh")),
-                    "สภาพอากาศ": cond_text(_scalar(_pick(_today_f, "cond"))),
-                })
-            if _rrows:
-                st.dataframe(pd.DataFrame(_rrows), use_container_width=True, hide_index=True,
-                    column_config={
-                        "ฝน (mm)": st.column_config.NumberColumn("🌧️ ฝน (mm)", format="%.1f"),
-                        "Tmax (°C)": st.column_config.NumberColumn("🌡️ Tmax", format="%.1f"),
-                        "Tmin (°C)": st.column_config.NumberColumn("❄️ Tmin", format="%.1f"),
-                        "RH%": st.column_config.NumberColumn("💧 RH%", format="%.0f"),
-                    })
-                st.caption(f"📍 {_sel_region_name} · {len(_rrows)} จังหวัด · ข้อมูลวันนี้จาก TMD /daily/region")
-            else:
-                st.info("ไม่มีข้อมูลรายจังหวัดในภูมิภาคนี้")
-        else:
-            st.info(f"ℹ️ ไม่สามารถดึงข้อมูล{_sel_region_name}ได้ในขณะนี้")
-
 
 # ══════════════════════════════════════════════════════════════
-#  FOOTER
+#  FOOTER + AUTO-REFRESH
 # ══════════════════════════════════════════════════════════════
-st.markdown("---")
+st.markdown("<hr style='border-color:#1c3247;margin:20px 0 10px;'>", unsafe_allow_html=True)
 st.markdown(f"""
-<div style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;
-    color:#2a4060;font-size:0.74rem;padding:4px 0;gap:12px;'>
-    <span>🚆 SRT Weather Alert v3.0 · มิถุนายน 2569</span>
-    <span>
-        อุตุฯ: <a href='https://data.tmd.go.th/nwpapi/doc/main/getting_start.html'
-            style='color:#2a6090;' target='_blank'>TMD NWP API v1</a>
-        · โครงข่าย: <a href='https://datagov.mot.go.th/en/organization/railway'
-            style='color:#2a6090;' target='_blank'>การรถไฟแห่งประเทศไทย</a>
-    </span>
-    <span>อัพเดต {NOW_TH.strftime('%d %b %Y · %H:%M')} น.</span>
+<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;color:#3a5570;font-size:0.74rem;'>
+    <span>🚆 SRT Weather Command Center · สำหรับผู้บริหารงานเดินรถ</span>
+    <span>ข้อมูล: <a href='https://data.tmd.go.th/nwpapi/doc/main/getting_start.html' target='_blank' style='color:#38bdf8;'>TMD NWP API v1</a> · โครงข่าย: <a href='https://datagov.mot.go.th' target='_blank' style='color:#38bdf8;'>รฟท.</a></span>
+    <span>อัพเดต {th_datetime(NOW_TH)}</span>
 </div>""", unsafe_allow_html=True)
 
-# ══════════════════════════════════════════════════════════════
-#  REAL-TIME AUTO-REFRESH
-#  ใช้ st_autorefresh ถ้ามี; ถ้าไม่มี fallback เป็น JS timer
-# ══════════════════════════════════════════════════════════════
-if auto_refresh and refresh_sec > 0:
-    _did_refresh = False
+if auto and refresh_sec>0:
+    done=False
     try:
         from streamlit_autorefresh import st_autorefresh
-        st_autorefresh(interval=refresh_sec * 1000, key="rt_refresh")
-        _did_refresh = True
+        st_autorefresh(interval=refresh_sec*1000, key="rt")
+        done=True
     except Exception:
-        _did_refresh = False
-
-    if not _did_refresh:
-        # Fallback: reload หน้าเว็บด้วย JS (ทำงานทุกกรณี)
-        st.markdown(
-            f"<script>setTimeout(function(){{window.location.reload();}},"
-            f"{refresh_sec * 1000});</script>",
-            unsafe_allow_html=True,
-        )
-        st.caption(f"🔴 ระบบจะเชื่อมข้อมูลใหม่อัตโนมัติทุก {refresh_sec} วินาที")
+        done=False
+    if not done:
+        st.markdown(f"<script>setTimeout(function(){{window.location.reload();}},{refresh_sec*1000});</script>", unsafe_allow_html=True)
