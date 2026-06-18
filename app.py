@@ -421,48 +421,86 @@ def fetch_token_test(token):
 # ══════════════════════════════════════════════════════════════
 #  HELPERS — parse NWP API response
 # ══════════════════════════════════════════════════════════════
+def _scalar(val):
+    """ดึงค่า scalar จาก field ที่อาจเป็น dict {'value':x} หรือ list หรือ scalar."""
+    if val is None:
+        return None
+    if isinstance(val, dict):
+        # TMD บางครั้งห่อค่าใน {"value": x} หรือ {"val": x}
+        for k in ("value", "val", "data", "amount"):
+            if k in val:
+                return _scalar(val[k])
+        return None
+    if isinstance(val, list):
+        return _scalar(val[0]) if val else None
+    return val
+
+def _to_float(val):
+    """แปลงเป็น float; คืน None ถ้าแปลงไม่ได้."""
+    val = _scalar(val)
+    if val is None or val == "" or val == "-":
+        return None
+    try:
+        import math as _m
+        f = float(val)
+        return None if _m.isnan(f) else f
+    except (TypeError, ValueError):
+        return None
+
+def _pick(d, *keys):
+    """ดึงค่าแรกที่เจอจากหลาย key (เผื่อ TMD เปลี่ยนชื่อ field)."""
+    for k in keys:
+        if k in d and d[k] is not None:
+            return d[k]
+    return None
+
+
 def parse_daily_forecast(data):
-    """แปลง response เป็น list ของ forecasts รายวัน"""
+    """แปลง response เป็น list ของ forecasts รายวัน (ทนทานต่อ field ที่หาย/ซ้อน)"""
     if not data or not isinstance(data, dict):
         return []
-    wf = data.get("WeatherForecasts") or data.get("forecasts") or []
-    if not wf:
+    wf = data.get("WeatherForecasts") or data.get("forecasts") or data.get("Forecasts") or []
+    if not wf or not isinstance(wf, list):
         return []
-    forecasts = wf[0].get("forecasts", []) if isinstance(wf, list) else []
+    forecasts = wf[0].get("forecasts", []) if isinstance(wf[0], dict) else []
     result = []
     for f in forecasts:
-        d = f.get("data", {}) if isinstance(f, dict) else {}
+        if not isinstance(f, dict):
+            continue
+        d = f.get("data", {}) or {}
         result.append({
-            "time": f.get("time", "") if isinstance(f, dict) else "",
-            "tc_max": d.get("tc_max"),
-            "tc_min": d.get("tc_min"),
-            "rh":     d.get("rh"),
-            "rain":   d.get("rain"),
-            "cond":   d.get("cond"),
-            "wd":     d.get("wd"),
-            "ws":     d.get("ws"),
+            "time":   f.get("time", "") or f.get("Time", ""),
+            "tc_max": _to_float(_pick(d, "tc_max", "tcMax", "tmax", "tc")),
+            "tc_min": _to_float(_pick(d, "tc_min", "tcMin", "tmin")),
+            "rh":     _to_float(_pick(d, "rh", "humidity", "RH")),
+            "rain":   _to_float(_pick(d, "rain", "rainfall", "Rain", "precip")),
+            "cond":   _scalar(_pick(d, "cond", "condition", "Cond")),
+            "wd":     _to_float(_pick(d, "wd", "winddir", "wind_dir")),
+            "ws":     _to_float(_pick(d, "ws", "windspeed", "wind_speed")),
         })
     return result
 
 
 def parse_hourly_forecast(data):
-    """แปลง response เป็น list ของ forecasts รายชั่วโมง"""
+    """แปลง response เป็น list ของ forecasts รายชั่วโมง (ทนทาน)"""
     if not data or not isinstance(data, dict):
         return []
-    wf = data.get("WeatherForecasts") or []
-    if not wf:
+    wf = data.get("WeatherForecasts") or data.get("forecasts") or []
+    if not wf or not isinstance(wf, list):
         return []
-    forecasts = wf[0].get("forecasts", []) if isinstance(wf, list) else []
+    forecasts = wf[0].get("forecasts", []) if isinstance(wf[0], dict) else []
     result = []
     for f in forecasts:
-        d = f.get("data", {}) if isinstance(f, dict) else {}
+        if not isinstance(f, dict):
+            continue
+        d = f.get("data", {}) or {}
         result.append({
-            "time": f.get("time", "") if isinstance(f, dict) else "",
-            "tc":   d.get("tc"),
-            "rh":   d.get("rh"),
-            "rain": d.get("rain"),
-            "cond": d.get("cond"),
-            "ws":   d.get("ws"),
+            "time": f.get("time", "") or f.get("Time", ""),
+            "tc":   _to_float(_pick(d, "tc", "temp", "temperature")),
+            "rh":   _to_float(_pick(d, "rh", "humidity", "RH")),
+            "rain": _to_float(_pick(d, "rain", "rainfall", "Rain", "precip")),
+            "cond": _scalar(_pick(d, "cond", "condition", "Cond")),
+            "ws":   _to_float(_pick(d, "ws", "windspeed", "wind_speed")),
         })
     return result
 
@@ -589,18 +627,30 @@ with st.sidebar:
                             horizontal=True, label_visibility="collapsed")
 
     st.markdown("---")
-    st.markdown(f"""
-    <div style='color:#4a7090;font-size:0.74rem;line-height:1.8;'>
-        🕐 เวลาไทย<br>
-        <span style='color:#5bc8ff;font-size:0.94rem;font-weight:700;'>
-            {NOW_TH.strftime('%d %b %Y · %H:%M')} น.
-        </span><br>
-        <span style='color:#2a5070;'>อัพเดตทุก 15–30 นาที</span>
-    </div>""", unsafe_allow_html=True)
+    # ── Real-time auto-refresh ─────────────────────────────────
+    st.markdown("<div style='color:#5bc8ff;font-size:0.76rem;font-weight:700;"
+                "text-transform:uppercase;letter-spacing:0.7px;margin-bottom:5px;'>"
+                "🔴 Real-time</div>", unsafe_allow_html=True)
+    auto_refresh = st.toggle("เชื่อมข้อมูลอัตโนมัติ", value=False,
+                             help="รีโหลดข้อมูลอัตโนมัติตามรอบเวลา")
+    refresh_sec = 0
+    if auto_refresh:
+        refresh_label = st.selectbox("รอบเวลา", ["1 นาที","5 นาที","10 นาที"],
+                                      index=1, label_visibility="collapsed")
+        refresh_sec = {"1 นาที":60, "5 นาที":300, "10 นาที":600}[refresh_label]
 
-    if st.button("🔄 รีเฟรชข้อมูล", use_container_width=True):
+    if st.button("🔄 รีเฟรชเดี๋ยวนี้", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
+
+    st.markdown(f"""
+    <div style='color:#4a7090;font-size:0.74rem;line-height:1.7;margin-top:8px;'>
+        🕐 ดึงข้อมูลล่าสุด<br>
+        <span style='color:#5bc8ff;font-size:0.92rem;font-weight:700;'>
+            {NOW_TH.strftime('%d %b · %H:%M:%S')} น.
+        </span>
+        {"<br><span style='color:#10b981;'>🔴 auto-refresh เปิด</span>" if auto_refresh else ""}
+    </div>""", unsafe_allow_html=True)
 
     st.markdown("---")
     for _ln, _ld in SRT_LINES.items():
@@ -641,24 +691,29 @@ for _ln, _ld in SRT_LINES.items():
 
 # ── Fetch weather for a batch of stations (cached) ────────────
 # NOTE: _nwp_get is plain (not cached) so nesting here is safe.
-@st.cache_data(ttl=1800, show_spinner=False)
-def fetch_station_batch(stations_tuple, token, horizon_idx):
-    """ดึงพยากรณ์รายวันของหลายสถานีในครั้งเดียว (cache ตาม token+ช่วงเวลา)"""
+#       cache_bucket lets us force-refresh on a time interval (real-time).
+@st.cache_data(ttl=600, show_spinner=False)
+def fetch_station_batch(stations_tuple, token, horizon_idx, cache_bucket):
+    """ดึงพยากรณ์รายวันของหลายสถานี (cache 10 นาที, refresh ตาม cache_bucket)"""
     results = []
+    n_ok = 0
     for s_json in stations_tuple:
         s = json.loads(s_json)
         chosen = {}
+        fetched = False
         if token:
             today_str = NOW_TH.strftime("%Y-%m-%d")
             params = {
-                "lat": s["lat"], "lon": s["lon"],
-                "fields": "tc_max,tc_min,rh,rain,cond,wd,ws",
+                "lat": round(s["lat"], 4), "lon": round(s["lon"], 4),
+                "fields": "tc_max,tc_min,rh,rain,cond,ws",
                 "date": today_str, "duration": 3,
             }
             _d, _e = _nwp_get("forecast/location/daily/at", params, token)
             _fc = parse_daily_forecast(_d)
             if _fc:
-                chosen = _fc[horizon_idx] if horizon_idx < len(_fc) else _fc[0]
+                chosen = _fc[horizon_idx] if horizon_idx < len(_fc) else _fc[-1]
+                fetched = True
+                n_ok += 1
         results.append({
             "name":      s["name"],
             "lat":       s["lat"],
@@ -671,23 +726,29 @@ def fetch_station_batch(stations_tuple, token, horizon_idx):
             "line_icon": s["line_icon"],
             "rain":      chosen.get("rain"),
             "tc_max":    chosen.get("tc_max"),
-            "tc_min":   chosen.get("tc_min"),
-            "rh":       chosen.get("rh"),
-            "cond":     chosen.get("cond"),
-            "wd":       chosen.get("wd"),
-            "ws":       chosen.get("ws"),
-            "time":     chosen.get("time", ""),
+            "tc_min":    chosen.get("tc_min"),
+            "rh":        chosen.get("rh"),
+            "cond":      chosen.get("cond"),
+            "wd":        chosen.get("wd"),
+            "ws":        chosen.get("ws"),
+            "time":      chosen.get("time", ""),
+            "fetched":   fetched,
         })
-    return results
+    return results, n_ok
 
-# Build station data
+# Build station data — cache_bucket changes every 10 min for auto-refresh
 _stns_tuple = tuple(json.dumps(s, ensure_ascii=False) for s in _filtered_stations)
-with st.spinner(f"⏳ กำลังดึงข้อมูลพยากรณ์ {len(_filtered_stations)} สถานี... (ใช้เวลา 10-30 วินาที)"):
-    station_data = fetch_station_batch(_stns_tuple, _token(), _horizon_index) if _api_ok else []
-    if not _api_ok:
+_cache_bucket = int(time.time() // 600)   # เปลี่ยนทุก 10 นาที → ดึงข้อมูลใหม่
+_n_fetched = 0
+with st.spinner(f"⏳ กำลังเชื่อมข้อมูลพยากรณ์ {len(_filtered_stations)} สถานีแบบ real-time..."):
+    if _api_ok:
+        station_data, _n_fetched = fetch_station_batch(
+            _stns_tuple, _token(), _horizon_index, _cache_bucket)
+    else:
         # Build placeholder data so UI still renders
         station_data = [{**s, "rain":None, "tc_max":None, "tc_min":None, "rh":None,
-                         "cond":None, "wd":None, "ws":None, "time":""} for s in _filtered_stations]
+                         "cond":None, "wd":None, "ws":None, "time":"", "fetched":False}
+                        for s in _filtered_stations]
 
 # Aggregate metrics
 _THRESH = {"ทั้งหมด":0, "ฝนเล็กน้อย":1, "ฝนปานกลาง":10, "ฝนหนัก":35, "ฝนหนักมาก":90}
@@ -717,20 +778,27 @@ st.markdown(f"""
 
 # Status bar
 _dot = '<span class="dot dot-green"></span>' if _api_ok else '<span class="dot dot-red"></span>'
+_conn_txt = ""
+if _api_ok:
+    _total_st = len(station_data)
+    if _n_fetched == _total_st:
+        _conn_txt = f"· เชื่อมข้อมูลครบ {_n_fetched}/{_total_st} สถานี"
+    else:
+        _conn_txt = f"· เชื่อมข้อมูล {_n_fetched}/{_total_st} สถานี (บางสถานีไม่มีข้อมูล)"
 st.markdown(f"""
 <div style='display:flex;align-items:center;gap:18px;background:rgba(10,20,35,0.7);
     border:1px solid rgba(91,200,255,0.1);border-radius:8px;padding:8px 18px;
     margin-bottom:14px;flex-wrap:wrap;'>
     <span style='font-size:0.8rem;color:#6899b8;'>{_dot}
         <b style='color:{"#10b981" if _api_ok else "#ef4444"};'>
-            {"✅ TMD NWP API เชื่อมต่อสำเร็จ" if _api_ok else "❌ API ไม่ตอบสนอง"}
+            {"✅ TMD NWP API · real-time" if _api_ok else "❌ API ไม่ตอบสนอง"}
         </b>
-        <span style='color:#4a7090;'>{("· " + _api_err) if not _api_ok and _api_err else ""}</span>
+        <span style='color:#4a7090;'>{_conn_txt if _api_ok else (("· " + _api_err) if _api_err else "")}</span>
     </span>
     <span style='font-size:0.8rem;color:#6899b8;'>🛤️ สาย: <b style='color:#a8cce0;'>{sel_line}</b></span>
     <span style='font-size:0.8rem;color:#6899b8;'>📍 สถานี: <b style='color:#a8cce0;'>{len(station_data)}</b></span>
     <span style='font-size:0.8rem;color:#6899b8;'>📅 พยากรณ์: <b style='color:#a8cce0;'>{sel_horizon}</b></span>
-    <span style='font-size:0.8rem;color:#6899b8;'>⚠️ เกณฑ์: <b style='color:#a8cce0;'>{sel_thresh}</b></span>
+    <span style='font-size:0.8rem;color:#6899b8;'>🕐 ดึงเมื่อ: <b style='color:#a8cce0;'>{NOW_TH.strftime('%H:%M')} น.</b></span>
 </div>""", unsafe_allow_html=True)
 
 # Show diagnostic if API failed
@@ -1192,3 +1260,25 @@ st.markdown(f"""
     </span>
     <span>อัพเดต {NOW_TH.strftime('%d %b %Y · %H:%M')} น.</span>
 </div>""", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════
+#  REAL-TIME AUTO-REFRESH
+#  ใช้ st_autorefresh ถ้ามี; ถ้าไม่มี fallback เป็น JS timer
+# ══════════════════════════════════════════════════════════════
+if auto_refresh and refresh_sec > 0:
+    _did_refresh = False
+    try:
+        from streamlit_autorefresh import st_autorefresh
+        st_autorefresh(interval=refresh_sec * 1000, key="rt_refresh")
+        _did_refresh = True
+    except Exception:
+        _did_refresh = False
+
+    if not _did_refresh:
+        # Fallback: reload หน้าเว็บด้วย JS (ทำงานทุกกรณี)
+        st.markdown(
+            f"<script>setTimeout(function(){{window.location.reload();}},"
+            f"{refresh_sec * 1000});</script>",
+            unsafe_allow_html=True,
+        )
+        st.caption(f"🔴 ระบบจะเชื่อมข้อมูลใหม่อัตโนมัติทุก {refresh_sec} วินาที")
