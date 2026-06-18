@@ -202,7 +202,7 @@ div[data-baseweb="select"] * { color: #a8cce0 !important; }
 # ══════════════════════════════════════════════════════════════
 #  TOKEN MANAGEMENT  (session_state-backed)
 # ══════════════════════════════════════════════════════════════
-def _decode_jwt(token: str) -> dict:
+def _decode_jwt(token):
     try:
         payload = token.split(".")[1]
         payload += "=" * (-len(payload) % 4)
@@ -210,7 +210,7 @@ def _decode_jwt(token: str) -> dict:
     except Exception:
         return {}
 
-def _set_token(raw: str) -> None:
+def _set_token(raw):
     raw = (raw or "").strip()
     st.session_state["_tk"]      = raw
     st.session_state["_tk_jwt"]  = _decode_jwt(raw)
@@ -228,9 +228,9 @@ if "_tk" not in st.session_state:
         _boot = os.environ.get("TMD_TOKEN", "")
     _set_token(_boot)
 
-def _token() -> str:    return st.session_state.get("_tk", "")
-def _uid()   -> str:    return st.session_state.get("_tk_uid", "")
-def _jwt()   -> dict:   return st.session_state.get("_tk_jwt", {})
+def _token():    return st.session_state.get("_tk", "")
+def _uid():    return st.session_state.get("_tk_uid", "")
+def _jwt():   return st.session_state.get("_tk_jwt", {})
 
 # ══════════════════════════════════════════════════════════════
 #  SRT RAILWAY NETWORK  (datagov.mot.go.th, updated 2026)
@@ -329,7 +329,7 @@ for _ln, _ld in SRT_LINES.items():
 # ══════════════════════════════════════════════════════════════
 TMD_NWP_BASE = "https://data.tmd.go.th/nwpapi/v1"
 
-def _nwp_get(path: str, params: dict, token: str) -> tuple[dict | None, str]:
+def _nwp_get(path, params, token):
     """Call NWP API endpoint. Returns (data, error_msg). data=None on error."""
     if not token:
         return None, "ไม่มี Token"
@@ -372,7 +372,7 @@ def _nwp_get(path: str, params: dict, token: str) -> tuple[dict | None, str]:
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
-def fetch_daily_at(lat: float, lon: float, token: str, days: int = 3) -> dict | None:
+def fetch_daily_at(lat, lon, token, days=3):
     """พยากรณ์รายวันที่ตำแหน่ง lat/lon"""
     today_str = NOW_TH.strftime("%Y-%m-%d")
     params = {
@@ -386,7 +386,7 @@ def fetch_daily_at(lat: float, lon: float, token: str, days: int = 3) -> dict | 
 
 
 @st.cache_data(ttl=900, show_spinner=False)
-def fetch_hourly_at(lat: float, lon: float, token: str, hours: int = 24) -> dict | None:
+def fetch_hourly_at(lat, lon, token, hours=24):
     """พยากรณ์ราย ชม. ที่ตำแหน่ง lat/lon"""
     today_str = NOW_TH.strftime("%Y-%m-%d")
     params = {
@@ -401,7 +401,7 @@ def fetch_hourly_at(lat: float, lon: float, token: str, hours: int = 24) -> dict
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
-def fetch_token_test(token: str) -> tuple[bool, str]:
+def fetch_token_test(token):
     """ทดสอบ token ว่าใช้งานได้หรือไม่"""
     if not token:
         return False, "ไม่มี Token"
@@ -421,7 +421,7 @@ def fetch_token_test(token: str) -> tuple[bool, str]:
 # ══════════════════════════════════════════════════════════════
 #  HELPERS — parse NWP API response
 # ══════════════════════════════════════════════════════════════
-def parse_daily_forecast(data: dict | None) -> list[dict]:
+def parse_daily_forecast(data):
     """แปลง response เป็น list ของ forecasts รายวัน"""
     if not data or not isinstance(data, dict):
         return []
@@ -445,7 +445,7 @@ def parse_daily_forecast(data: dict | None) -> list[dict]:
     return result
 
 
-def parse_hourly_forecast(data: dict | None) -> list[dict]:
+def parse_hourly_forecast(data):
     """แปลง response เป็น list ของ forecasts รายชั่วโมง"""
     if not data or not isinstance(data, dict):
         return []
@@ -475,7 +475,7 @@ COND_MAP = {
     10:"อากาศหนาว 🥶",    11:"อากาศเย็น 😎",     12:"อากาศร้อนจัด 🥵",
 }
 
-def cond_text(cond_code) -> str:
+def cond_text(cond_code):
     try:
         return COND_MAP.get(int(cond_code), f"รหัส {cond_code}")
     except Exception:
@@ -485,7 +485,7 @@ def cond_text(cond_code) -> str:
 # ══════════════════════════════════════════════════════════════
 #  RISK CLASSIFICATION
 # ══════════════════════════════════════════════════════════════
-def risk_class(rain_mm) -> tuple[str, str, str, str]:
+def risk_class(rain_mm):
     """Returns (label_th, emoji, badge_class, alert_class)"""
     if rain_mm is None:
         return "ไม่มีข้อมูล", "⚪", "badge-na", "alert-info"
@@ -499,7 +499,7 @@ def risk_class(rain_mm) -> tuple[str, str, str, str]:
     if rain_mm < 90:    return "ฝนหนัก ⚠️",    "⛈️", "badge-high",     "alert-warning"
     return                     "ฝนหนักมาก 🚨", "🌊", "badge-critical", "alert-critical"
 
-def risk_color_hex(rain_mm) -> str:
+def risk_color_hex(rain_mm):
     if rain_mm is None: return "#4a6070"
     try:    rain_mm = float(rain_mm)
     except: return "#4a6070"
@@ -642,7 +642,7 @@ for _ln, _ld in SRT_LINES.items():
 # ── Fetch weather for a batch of stations (cached) ────────────
 # NOTE: _nwp_get is plain (not cached) so nesting here is safe.
 @st.cache_data(ttl=1800, show_spinner=False)
-def fetch_station_batch(stations_tuple: tuple, token: str, horizon_idx: int) -> list[dict]:
+def fetch_station_batch(stations_tuple, token, horizon_idx):
     """ดึงพยากรณ์รายวันของหลายสถานีในครั้งเดียว (cache ตาม token+ช่วงเวลา)"""
     results = []
     for s_json in stations_tuple:
