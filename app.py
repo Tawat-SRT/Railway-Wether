@@ -373,26 +373,39 @@ def _nwp_get(path, params, token):
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def fetch_daily_at(lat, lon, token, days=3):
-    """พยากรณ์รายวันที่ตำแหน่ง lat/lon"""
-    today_str = NOW_TH.strftime("%Y-%m-%d")
+    """พยากรณ์รายวันที่ตำแหน่ง lat/lon (endpoint /daily/at)"""
     params = {
-        "lat": lat, "lon": lon,
-        "fields": "tc_max,tc_min,rh,rain,cond,wd,ws",
-        "date": today_str,
+        "lat": round(float(lat), 4), "lon": round(float(lon), 4),
+        "fields": "tc_max,tc_min,rh,rain,cond,ws10m,wd10m",
+        "date": NOW_TH.strftime("%Y-%m-%d"),
         "duration": days,
     }
     data, _err = _nwp_get("forecast/location/daily/at", params, token)
     return data
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_daily_place(province, token, amphoe=None, days=3):
+    """พยากรณ์รายวันตามชื่อจังหวัด/อำเภอ (endpoint /daily/place) — แม่นกว่า lat/lon"""
+    params = {
+        "province": province,
+        "fields": "tc_max,tc_min,rh,rain,cond,ws10m,wd10m",
+        "date": NOW_TH.strftime("%Y-%m-%d"),
+        "duration": days,
+    }
+    if amphoe:
+        params["amphoe"] = amphoe
+    data, _err = _nwp_get("forecast/location/daily/place", params, token)
+    return data
+
+
 @st.cache_data(ttl=900, show_spinner=False)
 def fetch_hourly_at(lat, lon, token, hours=24):
-    """พยากรณ์ราย ชม. ที่ตำแหน่ง lat/lon"""
-    today_str = NOW_TH.strftime("%Y-%m-%d")
+    """พยากรณ์ราย ชม. ที่ตำแหน่ง lat/lon (endpoint /hourly/at)"""
     params = {
-        "lat": lat, "lon": lon,
-        "fields": "tc,rh,rain,cond,ws",
-        "date": today_str,
+        "lat": round(float(lat), 4), "lon": round(float(lon), 4),
+        "fields": "tc,rh,rain,cond,ws10m",
+        "date": NOW_TH.strftime("%Y-%m-%d"),
         "hour": 0,
         "duration": hours,
     }
@@ -400,12 +413,27 @@ def fetch_hourly_at(lat, lon, token, hours=24):
     return data
 
 
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_hourly_place(province, token, amphoe=None, hours=24):
+    """พยากรณ์ราย ชม. ตามชื่อจังหวัด/อำเภอ (endpoint /hourly/place)"""
+    params = {
+        "province": province,
+        "fields": "tc,rh,rain,cond,ws10m",
+        "date": NOW_TH.strftime("%Y-%m-%d"),
+        "hour": 0,
+        "duration": hours,
+    }
+    if amphoe:
+        params["amphoe"] = amphoe
+    data, _err = _nwp_get("forecast/location/hourly/place", params, token)
+    return data
+
+
 @st.cache_data(ttl=1800, show_spinner=False)
 def fetch_token_test(token):
-    """ทดสอบ token ว่าใช้งานได้หรือไม่"""
+    """ทดสอบ token ว่าใช้งานได้หรือไม่ — ใช้ field พื้นฐาน tc ที่การันตีว่ามี"""
     if not token:
         return False, "ไม่มี Token"
-    # ลองดึงข้อมูลกรุงเทพฯ
     params = {
         "lat": 13.7563, "lon": 100.5018,
         "fields": "tc",
@@ -413,7 +441,7 @@ def fetch_token_test(token):
         "duration": 1,
     }
     data, err = _nwp_get("forecast/location/daily/at", params, token)
-    if data and isinstance(data, dict):
+    if data and isinstance(data, dict) and data.get("WeatherForecasts"):
         return True, "OK"
     return False, err
 
@@ -475,8 +503,8 @@ def parse_daily_forecast(data):
             "rh":     _to_float(_pick(d, "rh", "humidity", "RH")),
             "rain":   _to_float(_pick(d, "rain", "rainfall", "Rain", "precip")),
             "cond":   _scalar(_pick(d, "cond", "condition", "Cond")),
-            "wd":     _to_float(_pick(d, "wd", "winddir", "wind_dir")),
-            "ws":     _to_float(_pick(d, "ws", "windspeed", "wind_speed")),
+            "wd":     _to_float(_pick(d, "wd10m", "wd", "winddir", "wind_dir")),
+            "ws":     _to_float(_pick(d, "ws10m", "ws", "windspeed", "wind_speed")),
         })
     return result
 
@@ -500,7 +528,7 @@ def parse_hourly_forecast(data):
             "rh":   _to_float(_pick(d, "rh", "humidity", "RH")),
             "rain": _to_float(_pick(d, "rain", "rainfall", "Rain", "precip")),
             "cond": _scalar(_pick(d, "cond", "condition", "Cond")),
-            "ws":   _to_float(_pick(d, "ws", "windspeed", "wind_speed")),
+            "ws":   _to_float(_pick(d, "ws10m", "ws", "windspeed", "wind_speed")),
         })
     return result
 
@@ -703,13 +731,23 @@ def fetch_station_batch(stations_tuple, token, horizon_idx, cache_bucket):
         fetched = False
         if token:
             today_str = NOW_TH.strftime("%Y-%m-%d")
+            # วิธีที่ 1: ดึงตามพิกัด lat/lon (แม่นยำที่สุด)
             params = {
                 "lat": round(s["lat"], 4), "lon": round(s["lon"], 4),
-                "fields": "tc_max,tc_min,rh,rain,cond,ws",
+                "fields": "tc_max,tc_min,rh,rain,cond,ws10m,wd10m",
                 "date": today_str, "duration": 3,
             }
             _d, _e = _nwp_get("forecast/location/daily/at", params, token)
             _fc = parse_daily_forecast(_d)
+            # วิธีที่ 2 (fallback): ถ้า lat/lon ไม่ได้ผล ลองดึงตามจังหวัด
+            if not _fc and s.get("province"):
+                params_p = {
+                    "province": s["province"],
+                    "fields": "tc_max,tc_min,rh,rain,cond,ws10m,wd10m",
+                    "date": today_str, "duration": 3,
+                }
+                _dp, _ep = _nwp_get("forecast/location/daily/place", params_p, token)
+                _fc = parse_daily_forecast(_dp)
             if _fc:
                 chosen = _fc[horizon_idx] if horizon_idx < len(_fc) else _fc[-1]
                 fetched = True
@@ -806,7 +844,9 @@ if not _api_ok and _token():
     with st.expander("🔍 รายละเอียดข้อผิดพลาด API", expanded=False):
         st.code(f"""
 URL Base    : {TMD_NWP_BASE}
-Endpoint    : forecast/location/daily/at
+Endpoints   : forecast/location/daily/at   (พิกัด lat/lon)
+              forecast/location/daily/place (จังหวัด — fallback)
+Fields      : tc_max,tc_min,rh,rain,cond,ws10m,wd10m
 Auth Header : Bearer {_token()[:30]}...{_token()[-10:]}
 UID (sub)   : {_uid()}
 Error       : {_api_err}
@@ -1202,6 +1242,9 @@ with tab_forecast:
             with st.spinner("กำลังโหลดพยากรณ์..."):
                 _d_data = fetch_daily_at(_sel_stn["lat"], _sel_stn["lon"], _token(), days=3)
                 _d_fc = parse_daily_forecast(_d_data)
+                if not _d_fc and _sel_stn.get("province"):
+                    _d_data = fetch_daily_place(_sel_stn["province"], _token(), days=3)
+                    _d_fc = parse_daily_forecast(_d_data)
             if _d_fc:
                 _drows = []
                 for f in _d_fc:
@@ -1224,6 +1267,9 @@ with tab_forecast:
             with st.spinner("กำลังโหลดพยากรณ์ราย ชม..."):
                 _h_data = fetch_hourly_at(_sel_stn["lat"], _sel_stn["lon"], _token(), hours=24)
                 _h_fc = parse_hourly_forecast(_h_data)
+                if not _h_fc and _sel_stn.get("province"):
+                    _h_data = fetch_hourly_place(_sel_stn["province"], _token(), hours=24)
+                    _h_fc = parse_hourly_forecast(_h_data)
             if _h_fc:
                 _hrows = []
                 for f in _h_fc:
