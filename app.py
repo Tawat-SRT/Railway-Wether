@@ -378,6 +378,7 @@ def fetch_daily_at(lat, lon, token, days=3):
         "lat": round(float(lat), 4), "lon": round(float(lon), 4),
         "fields": "tc_max,tc_min,rh,rain,cond,ws10m,wd10m",
         "date": NOW_TH.strftime("%Y-%m-%d"),
+        "hour": 6,
         "duration": days,
     }
     data, _err = _nwp_get("forecast/location/daily/at", params, token)
@@ -391,12 +392,35 @@ def fetch_daily_place(province, token, amphoe=None, days=3):
         "province": province,
         "fields": "tc_max,tc_min,rh,rain,cond,ws10m,wd10m",
         "date": NOW_TH.strftime("%Y-%m-%d"),
+        "hour": 6,
         "duration": days,
     }
     if amphoe:
         params["amphoe"] = amphoe
     data, _err = _nwp_get("forecast/location/daily/place", params, token)
     return data
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_daily_region(region_code, token, days=3):
+    """พยากรณ์รายวันของทุกจังหวัดในภูมิภาค (endpoint /daily/region)
+       region_code: N=เหนือ, NE=อีสาน, C=กลาง, E=ตะวันออก, S=ใต้ฝั่งตะวันออก, W=ใต้ฝั่งตะวันตก"""
+    params = {
+        "name": region_code,
+        "fields": "tc_max,tc_min,rh,rain,cond",
+        "date": NOW_TH.strftime("%Y-%m-%d"),
+        "hour": 6,
+        "duration": days,
+    }
+    data, _err = _nwp_get("forecast/location/daily/region", params, token)
+    return data
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def fetch_daily_coverage(token):
+    """ขอบเขตข้อมูลพยากรณ์รายวันที่มีในระบบ (endpoint /forecast/location/daily)"""
+    data, err = _nwp_get("forecast/location/daily", {}, token)
+    return data, err
 
 
 @st.cache_data(ttl=900, show_spinner=False)
@@ -438,6 +462,7 @@ def fetch_token_test(token):
         "lat": 13.7563, "lon": 100.5018,
         "fields": "tc",
         "date": NOW_TH.strftime("%Y-%m-%d"),
+        "hour": 6,
         "duration": 1,
     }
     data, err = _nwp_get("forecast/location/daily/at", params, token)
@@ -481,6 +506,23 @@ def _pick(d, *keys):
         if k in d and d[k] is not None:
             return d[k]
     return None
+
+
+def parse_coverage(data):
+    """แปลงข้อมูลขอบเขต (เริ่ม-สิ้นสุด) ของพยากรณ์รายวันในระบบ"""
+    if not data or not isinstance(data, dict):
+        return {}
+    cov = data.get("WeatherForecasts") or data.get("coverage") or data
+    if isinstance(cov, list) and cov:
+        cov = cov[0]
+    if not isinstance(cov, dict):
+        return {}
+    return {
+        "begin":  _scalar(_pick(cov, "begin_date", "beginDate", "start_date", "start", "begin")),
+        "end":    _scalar(_pick(cov, "end_date", "endDate", "stop_date", "stop", "end")),
+        "fields": cov.get("fields") or cov.get("Fields") or [],
+        "raw":    cov,
+    }
 
 
 def parse_daily_forecast(data):
@@ -704,6 +746,11 @@ _api_ok, _api_err = (False, "ไม่มี Token")
 if _token():
     _api_ok, _api_err = fetch_token_test(_token())
 
+# ── ขอบเขตข้อมูลพยากรณ์ที่มีในระบบ (data coverage) ─────────────
+_coverage, _coverage_err = (None, "")
+if _api_ok:
+    _coverage, _coverage_err = fetch_daily_coverage(_token())
+
 # ── Build filtered + deduplicated station list ────────────────
 _filtered_stations = []
 _seen_names = set()
@@ -735,7 +782,7 @@ def fetch_station_batch(stations_tuple, token, horizon_idx, cache_bucket):
             params = {
                 "lat": round(s["lat"], 4), "lon": round(s["lon"], 4),
                 "fields": "tc_max,tc_min,rh,rain,cond,ws10m,wd10m",
-                "date": today_str, "duration": 3,
+                "date": today_str, "hour": 6, "duration": 3,
             }
             _d, _e = _nwp_get("forecast/location/daily/at", params, token)
             _fc = parse_daily_forecast(_d)
@@ -744,7 +791,7 @@ def fetch_station_batch(stations_tuple, token, horizon_idx, cache_bucket):
                 params_p = {
                     "province": s["province"],
                     "fields": "tc_max,tc_min,rh,rain,cond,ws10m,wd10m",
-                    "date": today_str, "duration": 3,
+                    "date": today_str, "hour": 6, "duration": 3,
                 }
                 _dp, _ep = _nwp_get("forecast/location/daily/place", params_p, token)
                 _fc = parse_daily_forecast(_dp)
@@ -838,6 +885,22 @@ st.markdown(f"""
     <span style='font-size:0.8rem;color:#6899b8;'>📅 พยากรณ์: <b style='color:#a8cce0;'>{sel_horizon}</b></span>
     <span style='font-size:0.8rem;color:#6899b8;'>🕐 ดึงเมื่อ: <b style='color:#a8cce0;'>{NOW_TH.strftime('%H:%M')} น.</b></span>
 </div>""", unsafe_allow_html=True)
+
+# ── Data coverage banner (ขอบเขตข้อมูลพยากรณ์ที่มีในระบบ) ──────
+if _api_ok and _coverage:
+    _cov = parse_coverage(_coverage)
+    if _cov.get("begin") or _cov.get("end"):
+        _cov_fields = _cov.get("fields") or []
+        _cov_fields_txt = ", ".join(str(f) for f in _cov_fields[:12]) if _cov_fields else "—"
+        st.markdown(f"""
+        <div style='background:rgba(16,80,60,0.18);border:1px solid rgba(16,185,129,0.3);
+            border-left:4px solid #10b981;border-radius:8px;padding:8px 18px;margin-bottom:14px;
+            font-size:0.8rem;color:#a8cce0;'>
+            📊 <b style='color:#34d399;'>ขอบเขตข้อมูลพยากรณ์รายวันในระบบ TMD:</b>
+            เริ่ม <b style='color:#fff;'>{_cov.get('begin','—')}</b>
+            ถึง <b style='color:#fff;'>{_cov.get('end','—')}</b>
+            {f" · ตัวแปรที่มี: {_cov_fields_txt}" if _cov_fields else ""}
+        </div>""", unsafe_allow_html=True)
 
 # Show diagnostic if API failed
 if not _api_ok and _token():
@@ -1288,6 +1351,52 @@ with tab_forecast:
             st.markdown("</div>", unsafe_allow_html=True)
     elif not _api_ok:
         st.info("ℹ️ ต้องเชื่อมต่อ TMD API ก่อนเพื่อดูพยากรณ์ละเอียด — ใส่ Token ใน Sidebar")
+
+    # ── พยากรณ์รายภูมิภาค (endpoint /daily/region) ────────────────
+    st.markdown('<div class="sec-title">🌏 พยากรณ์รายภูมิภาค (ทุกจังหวัดในภาค)</div>',
+                unsafe_allow_html=True)
+    _REGION_OPTS = {
+        "ภาคเหนือ": "N", "ภาคตะวันออกเฉียงเหนือ": "NE", "ภาคกลาง": "C",
+        "ภาคตะวันออก": "E", "ภาคใต้ฝั่งตะวันออก": "S", "ภาคใต้ฝั่งตะวันตก": "W",
+    }
+    _sel_region_name = st.selectbox("เลือกภูมิภาค", list(_REGION_OPTS.keys()),
+                                     key="region_select")
+    if _api_ok:
+        _rcode = _REGION_OPTS[_sel_region_name]
+        with st.spinner(f"กำลังโหลดพยากรณ์{_sel_region_name}..."):
+            _rdata = fetch_daily_region(_rcode, _token(), days=3)
+        # region คืน list หลายจังหวัด
+        _rprov = []
+        if _rdata and isinstance(_rdata, dict):
+            _rprov = _rdata.get("WeatherForecasts") or _rdata.get("forecasts") or []
+        if _rprov:
+            _rrows = []
+            for _p in _rprov:
+                _loc = _p.get("location", {}) if isinstance(_p, dict) else {}
+                _pname = _scalar(_pick(_loc, "province", "name", "amphoe")) or "—"
+                _pf = _p.get("forecasts", []) if isinstance(_p, dict) else []
+                _today_f = _pf[0].get("data", {}) if _pf else {}
+                _rrows.append({
+                    "จังหวัด": _pname,
+                    "ฝน (mm)": _to_float(_pick(_today_f, "rain")),
+                    "Tmax (°C)": _to_float(_pick(_today_f, "tc_max")),
+                    "Tmin (°C)": _to_float(_pick(_today_f, "tc_min")),
+                    "RH%": _to_float(_pick(_today_f, "rh")),
+                    "สภาพอากาศ": cond_text(_scalar(_pick(_today_f, "cond"))),
+                })
+            if _rrows:
+                st.dataframe(pd.DataFrame(_rrows), use_container_width=True, hide_index=True,
+                    column_config={
+                        "ฝน (mm)": st.column_config.NumberColumn("🌧️ ฝน (mm)", format="%.1f"),
+                        "Tmax (°C)": st.column_config.NumberColumn("🌡️ Tmax", format="%.1f"),
+                        "Tmin (°C)": st.column_config.NumberColumn("❄️ Tmin", format="%.1f"),
+                        "RH%": st.column_config.NumberColumn("💧 RH%", format="%.0f"),
+                    })
+                st.caption(f"📍 {_sel_region_name} · {len(_rrows)} จังหวัด · ข้อมูลวันนี้จาก TMD /daily/region")
+            else:
+                st.info("ไม่มีข้อมูลรายจังหวัดในภูมิภาคนี้")
+        else:
+            st.info(f"ℹ️ ไม่สามารถดึงข้อมูล{_sel_region_name}ได้ในขณะนี้")
 
 
 # ══════════════════════════════════════════════════════════════
