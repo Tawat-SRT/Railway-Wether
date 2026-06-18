@@ -51,10 +51,22 @@ h1,h2,h3,.kanit { font-family: 'Kanit', sans-serif !important; }
 
 .stApp {
     background:
-        radial-gradient(1200px 500px at 80% -10%, rgba(56,189,248,0.06), transparent),
-        linear-gradient(180deg, #070d15 0%, #0b1622 55%, #070d15 100%);
+        radial-gradient(900px 600px at 85% -5%, rgba(56,189,248,0.10), transparent 60%),
+        radial-gradient(700px 500px at 10% 5%, rgba(212,175,55,0.06), transparent 55%),
+        radial-gradient(800px 700px at 50% 110%, rgba(99,102,241,0.07), transparent 60%),
+        linear-gradient(180deg, #060b13 0%, #0a1320 50%, #070d16 100%);
+    background-attachment: fixed;
 }
-.block-container { padding-top: 1.4rem !important; max-width: 1500px; }
+.stApp::before {
+    content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
+    background-image:
+        linear-gradient(rgba(56,189,248,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(56,189,248,0.025) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, #000 40%, transparent 90%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, #000 40%, transparent 90%);
+}
+.block-container { padding-top: 1.4rem !important; max-width: 1500px; position:relative; z-index:1; }
 
 /* Sidebar */
 [data-testid="stSidebar"] {
@@ -63,8 +75,15 @@ h1,h2,h3,.kanit { font-family: 'Kanit', sans-serif !important; }
 }
 [data-testid="stSidebar"] * { color: var(--ink2) !important; }
 
-/* Hide default header */
+/* Hide default header + top-right toolbar/menu/deploy button */
 [data-testid="stHeader"] { background: transparent !important; }
+[data-testid="stToolbar"] { display: none !important; }
+[data-testid="stDecoration"] { display: none !important; }
+[data-testid="stStatusWidget"] { display: none !important; }
+#MainMenu { visibility: hidden !important; }
+header { visibility: hidden !important; }
+footer { visibility: hidden !important; }
+.stDeployButton { display: none !important; }
 
 /* ── Command header ── */
 .cmd-header {
@@ -239,22 +258,33 @@ SRT_LINES = {
     "สายเหนือ": {"color":"#ef4444","short":"N","icon":"🔴","desc":"กรุงเทพ → เชียงใหม่ · 751 กม.",
         "stations":[
             {"name":"กรุงเทพ (หัวลำโพง)","lat":13.7401,"lon":100.5178,"province":"กรุงเทพมหานคร","km":0},
+            {"name":"บางซื่อ (กลางบางซื่อ)","lat":13.8021,"lon":100.5398,"province":"กรุงเทพมหานคร","km":7},
             {"name":"ดอนเมือง","lat":13.9186,"lon":100.5970,"province":"กรุงเทพมหานคร","km":22},
+            {"name":"รังสิต","lat":14.0262,"lon":100.6162,"province":"ปทุมธานี","km":31},
             {"name":"อยุธยา","lat":14.3554,"lon":100.5679,"province":"พระนครศรีอยุธยา","km":71},
+            {"name":"บ้านภาชี","lat":14.5283,"lon":100.7253,"province":"พระนครศรีอยุธยา","km":90},
             {"name":"ลพบุรี","lat":14.7987,"lon":100.6141,"province":"ลพบุรี","km":133},
-            {"name":"นครสวรรค์","lat":15.7028,"lon":100.1363,"province":"นครสวรรค์","km":246},
+            {"name":"ปากน้ำโพ/นครสวรรค์","lat":15.7028,"lon":100.1363,"province":"นครสวรรค์","km":246},
+            {"name":"พิจิตร","lat":16.4365,"lon":100.3485,"province":"พิจิตร","km":347},
             {"name":"พิษณุโลก","lat":16.8204,"lon":100.2714,"province":"พิษณุโลก","km":389},
             {"name":"อุตรดิตถ์","lat":17.6236,"lon":100.0987,"province":"อุตรดิตถ์","km":485},
+            {"name":"ศิลาอาสน์","lat":17.6097,"lon":100.0997,"province":"อุตรดิตถ์","km":488},
             {"name":"เด่นชัย","lat":17.9827,"lon":100.0569,"province":"แพร่","km":535},
             {"name":"ลำปาง","lat":18.2896,"lon":99.4905,"province":"ลำปาง","km":642},
+            {"name":"ขุนตาน","lat":18.4392,"lon":99.0247,"province":"ลำพูน","km":683},
+            {"name":"ลำพูน","lat":18.5746,"lon":99.0094,"province":"ลำพูน","km":729},
             {"name":"เชียงใหม่","lat":18.7883,"lon":98.9933,"province":"เชียงใหม่","km":751},
         ]},
     "สายตะวันออกเฉียงเหนือ": {"color":"#f59e0b","short":"NE","icon":"🟡","desc":"กรุงเทพ → หนองคาย · 624 กม.",
         "stations":[
             {"name":"กรุงเทพ (หัวลำโพง)","lat":13.7401,"lon":100.5178,"province":"กรุงเทพมหานคร","km":0},
+            {"name":"รังสิต","lat":14.0262,"lon":100.6162,"province":"ปทุมธานี","km":31},
             {"name":"สระบุรี","lat":14.5291,"lon":100.9101,"province":"สระบุรี","km":107},
+            {"name":"แก่งคอย","lat":14.5847,"lon":101.0017,"province":"สระบุรี","km":125},
             {"name":"ปากช่อง","lat":14.7043,"lon":101.4180,"province":"นครราชสีมา","km":180},
             {"name":"นครราชสีมา","lat":14.9734,"lon":102.1112,"province":"นครราชสีมา","km":264},
+            {"name":"บัวใหญ่","lat":15.5887,"lon":102.4242,"province":"นครราชสีมา","km":361},
+            {"name":"บ้านไผ่","lat":16.0608,"lon":102.7331,"province":"ขอนแก่น","km":410},
             {"name":"ขอนแก่น","lat":16.4419,"lon":102.8330,"province":"ขอนแก่น","km":449},
             {"name":"อุดรธานี","lat":17.4043,"lon":102.7877,"province":"อุดรธานี","km":569},
             {"name":"หนองคาย","lat":17.8818,"lon":102.7433,"province":"หนองคาย","km":624},
@@ -262,10 +292,14 @@ SRT_LINES = {
     "สายอีสานใต้": {"color":"#a78bfa","short":"IS","icon":"🟣","desc":"นครราชสีมา → อุบลราชธานี · 305 กม.",
         "stations":[
             {"name":"นครราชสีมา (ถนนจิระ)","lat":14.9734,"lon":102.1112,"province":"นครราชสีมา","km":0},
+            {"name":"ลำปลายมาศ","lat":14.9420,"lon":102.8331,"province":"บุรีรัมย์","km":75},
             {"name":"บุรีรัมย์","lat":14.9950,"lon":103.1030,"province":"บุรีรัมย์","km":101},
+            {"name":"ลำชี","lat":14.9100,"lon":103.3500,"province":"สุรินทร์","km":125},
             {"name":"สุรินทร์","lat":14.8835,"lon":103.4935,"province":"สุรินทร์","km":142},
+            {"name":"ศีขรภูมิ","lat":14.9466,"lon":103.7889,"province":"สุรินทร์","km":175},
             {"name":"ศรีสะเกษ","lat":15.1174,"lon":104.3221,"province":"ศรีสะเกษ","km":237},
-            {"name":"อุบลราชธานี","lat":15.2241,"lon":104.8579,"province":"อุบลราชธานี","km":305},
+            {"name":"กันทรารมย์","lat":15.0900,"lon":104.6000,"province":"ศรีสะเกษ","km":270},
+            {"name":"อุบลราชธานี (วารินชำราบ)","lat":15.2241,"lon":104.8579,"province":"อุบลราชธานี","km":305},
         ]},
     "สายใต้": {"color":"#34d399","short":"S","icon":"🟢","desc":"กรุงเทพ → สุไหงโก-ลก · 1,144 กม.",
         "stations":[
@@ -275,19 +309,41 @@ SRT_LINES = {
             {"name":"เพชรบุรี","lat":13.1093,"lon":99.9494,"province":"เพชรบุรี","km":167},
             {"name":"หัวหิน","lat":12.5675,"lon":99.9576,"province":"ประจวบคีรีขันธ์","km":229},
             {"name":"ประจวบคีรีขันธ์","lat":11.8121,"lon":99.7962,"province":"ประจวบคีรีขันธ์","km":318},
+            {"name":"บางสะพานใหญ่","lat":11.2107,"lon":99.5117,"province":"ประจวบคีรีขันธ์","km":390},
             {"name":"ชุมพร","lat":10.4930,"lon":99.1800,"province":"ชุมพร","km":485},
-            {"name":"สุราษฎร์ธานี","lat":9.1400,"lon":99.3300,"province":"สุราษฎร์ธานี","km":651},
+            {"name":"หลังสวน","lat":9.9500,"lon":99.0760,"province":"ชุมพร","km":542},
+            {"name":"สุราษฎร์ธานี (พุนพิน)","lat":9.1400,"lon":99.3300,"province":"สุราษฎร์ธานี","km":651},
+            {"name":"ทุ่งสง","lat":8.1664,"lon":99.6818,"province":"นครศรีธรรมราช","km":767},
             {"name":"นครศรีธรรมราช","lat":8.4330,"lon":99.9630,"province":"นครศรีธรรมราช","km":832},
-            {"name":"หาดใหญ่","lat":7.0080,"lon":100.4740,"province":"สงขลา","km":945},
+            {"name":"พัทลุง","lat":7.6167,"lon":100.0781,"province":"พัทลุง","km":862},
+            {"name":"หาดใหญ่ (ชุมทาง)","lat":7.0080,"lon":100.4740,"province":"สงขลา","km":945},
+            {"name":"ยะลา","lat":6.5410,"lon":101.2800,"province":"ยะลา","km":1055},
             {"name":"สุไหงโก-ลก","lat":6.0277,"lon":101.9784,"province":"นราธิวาส","km":1144},
+        ]},
+    "สายใต้ (แยกกันตัง)": {"color":"#2dd4bf","short":"SW","icon":"🟩","desc":"ทุ่งสง → กันตัง · 93 กม.",
+        "stations":[
+            {"name":"ทุ่งสง","lat":8.1664,"lon":99.6818,"province":"นครศรีธรรมราช","km":0},
+            {"name":"ห้วยยอด","lat":7.7900,"lon":99.6350,"province":"ตรัง","km":45},
+            {"name":"ตรัง","lat":7.5563,"lon":99.6114,"province":"ตรัง","km":67},
+            {"name":"กันตัง","lat":7.4090,"lon":99.5160,"province":"ตรัง","km":93},
         ]},
     "สายตะวันออก": {"color":"#60a5fa","short":"E","icon":"🔵","desc":"กรุงเทพ → อรัญประเทศ · 255 กม.",
         "stations":[
             {"name":"กรุงเทพ (มักกะสัน)","lat":13.7524,"lon":100.5684,"province":"กรุงเทพมหานคร","km":0},
-            {"name":"ฉะเชิงเทรา","lat":13.6903,"lon":101.0768,"province":"ฉะเชิงเทรา","km":61},
-            {"name":"ชลบุรี","lat":13.3639,"lon":100.9905,"province":"ชลบุรี","km":120},
-            {"name":"พัทยา","lat":12.9236,"lon":100.8825,"province":"ชลบุรี","km":154},
+            {"name":"ฉะเชิงเทรา (ชุมทาง)","lat":13.6903,"lon":101.0768,"province":"ฉะเชิงเทรา","km":61},
+            {"name":"ปราจีนบุรี","lat":14.0510,"lon":101.3730,"province":"ปราจีนบุรี","km":122},
+            {"name":"กบินทร์บุรี","lat":13.9490,"lon":101.7180,"province":"ปราจีนบุรี","km":166},
+            {"name":"สระแก้ว","lat":13.8240,"lon":102.0640,"province":"สระแก้ว","km":210},
             {"name":"อรัญประเทศ","lat":13.6942,"lon":102.5062,"province":"สระแก้ว","km":255},
+        ]},
+    "สายชายฝั่งทะเลตะวันออก": {"color":"#818cf8","short":"EC","icon":"🟦","desc":"ฉะเชิงเทรา → มาบตาพุด · 134 กม.",
+        "stations":[
+            {"name":"ฉะเชิงเทรา (ชุมทาง)","lat":13.6903,"lon":101.0768,"province":"ฉะเชิงเทรา","km":0},
+            {"name":"ชลบุรี","lat":13.3639,"lon":100.9905,"province":"ชลบุรี","km":48},
+            {"name":"ศรีราชา","lat":13.1740,"lon":100.9300,"province":"ชลบุรี","km":78},
+            {"name":"แหลมฉบัง","lat":13.0820,"lon":100.8850,"province":"ชลบุรี","km":92},
+            {"name":"พัทยา","lat":12.9236,"lon":100.8825,"province":"ชลบุรี","km":110},
+            {"name":"มาบตาพุด","lat":12.6793,"lon":101.1500,"province":"ระยอง","km":134},
         ]},
 }
 
@@ -358,6 +414,54 @@ def fetch_token_test(token):
     if d and isinstance(d, dict) and d.get("WeatherForecasts"):
         return True, "OK"
     return False, err
+
+# ── USGS Earthquake feed (Thailand + neighboring region, no auth) ──
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_earthquakes(days=7, min_mag=2.5):
+    """ดึงข้อมูลแผ่นดินไหวในไทย+ภูมิภาคใกล้เคียง จาก USGS (ไม่ต้อง token)
+       ครอบคลุม: ไทย เมียนมา ลาว กัมพูชา เวียดนามตอนใต้ มาเลเซียเหนือ อันดามัน"""
+    start = (NOW_TH - timedelta(days=days)).strftime("%Y-%m-%d")
+    params = {
+        "format":"geojson", "starttime":start,
+        "minlatitude":3.0, "maxlatitude":24.0,
+        "minlongitude":92.0, "maxlongitude":110.0,
+        "minmagnitude":min_mag, "orderby":"time",
+    }
+    try:
+        r = requests.get("https://earthquake.usgs.gov/fdsnws/event/1/query",
+                         params=params, timeout=12)
+        if r.status_code == 200:
+            return r.json(), ""
+        return None, f"USGS HTTP {r.status_code}"
+    except Exception as e:
+        return None, f"{type(e).__name__}: {str(e)[:50]}"
+
+def parse_earthquakes(geojson):
+    if not geojson or not isinstance(geojson, dict):
+        return []
+    out = []
+    for feat in geojson.get("features", []):
+        p = feat.get("properties", {}) or {}
+        g = feat.get("geometry", {}) or {}
+        coords = g.get("coordinates", [None,None,None])
+        ts = p.get("time")
+        when = ""
+        if ts:
+            try:
+                when = datetime.fromtimestamp(ts/1000, tz=TZ_TH).strftime("%d/%m %H:%M")
+            except Exception:
+                when = ""
+        out.append({
+            "mag": p.get("mag"),
+            "place": p.get("place","") or "",
+            "time": when,
+            "ts": ts or 0,
+            "depth": coords[2] if len(coords)>2 else None,
+            "lat": coords[1] if len(coords)>1 else None,
+            "lon": coords[0] if coords else None,
+        })
+    out.sort(key=lambda x: x["ts"], reverse=True)
+    return out
 
 # ── parse helpers ──
 def _scalar(v):
@@ -446,6 +550,27 @@ def rain_risk(mm):
 def rain_hex(mm):
     return rain_risk(mm)[3]
 
+def assess_7day(series):
+    """ประเมินความเสี่ยงล่วงหน้า 7 วันจาก series พยากรณ์รายวัน
+       คืน (peak_level, peak_day_label, peak_rain, n_risk_days, advice)"""
+    if not series:
+        return (-1, "—", None, 0, "ไม่มีข้อมูล")
+    peak = -1; peak_rain = None; peak_idx = 0; n_risk = 0
+    for i, f in enumerate(series[:7]):
+        r = f.get("rain")
+        lv = rain_risk(r)[0]
+        if lv >= 3:
+            n_risk += 1
+        if r is not None and (peak_rain is None or r > peak_rain):
+            peak_rain = r; peak = lv; peak_idx = i
+    labels = ["วันนี้","พรุ่งนี้","มะรืน","อีก 3 วัน","อีก 4 วัน","อีก 5 วัน","อีก 6 วัน"]
+    peak_label = labels[peak_idx] if peak_idx < len(labels) else f"+{peak_idx}"
+    if peak >= 4:   advice = "เสี่ยงสูงมาก — เตรียมแผนชะลอ/งดเดินรถ"
+    elif peak >= 3: advice = "เสี่ยงสูง — เฝ้าระวังและเตรียมความพร้อม"
+    elif peak >= 2: advice = "เสี่ยงปานกลาง — ติดตามสถานการณ์"
+    else:           advice = "เสี่ยงต่ำ — เดินรถปกติ"
+    return (peak, peak_label, peak_rain, n_risk, advice)
+
 # ══════════════════════════════════════════════════════════════
 #  SIDEBAR
 # ══════════════════════════════════════════════════════════════
@@ -453,8 +578,9 @@ with st.sidebar:
     st.markdown("""
     <div style='text-align:center;padding:10px 0 16px;'>
         <div style='font-size:2.6rem;'>🚆</div>
-        <div style='font-family:Kanit;color:#fff;font-size:1.1rem;font-weight:700;'>Weather Command</div>
-        <div style='color:#5f8199;font-size:0.72rem;letter-spacing:0.5px;'>SRT EXECUTIVE CENTER</div>
+        <div style='font-family:Kanit;color:#fff;font-size:1.0rem;font-weight:700;line-height:1.3;'>ศูนย์ความปลอดภัย</div>
+        <div style='color:#9fbcd0;font-size:0.78rem;'>ฝ่ายการช่างโยธา</div>
+        <div style='color:#5f8199;font-size:0.7rem;letter-spacing:0.5px;margin-top:2px;'>การรถไฟแห่งประเทศไทย</div>
     </div>""", unsafe_allow_html=True)
 
     # Token
@@ -464,13 +590,20 @@ with st.sidebar:
         days = (exp_dt - NOW_TH).days if exp_dt else 0
         col = "#10b981" if days>30 else "#f59e0b" if days>0 else "#ef4444"
         st.markdown(f"""
-        <div style='background:rgba(10,20,35,0.8);border:1px solid #1c3247;border-radius:10px;padding:10px 14px;margin-bottom:14px;'>
+        <div style='background:rgba(10,20,35,0.8);border:1px solid #1c3247;border-radius:10px;padding:10px 14px;margin-bottom:10px;'>
             <div style='color:#5f8199;font-size:0.7rem;'>🔑 TMD NWP API</div>
             <div style='color:#38bdf8;font-size:0.8rem;font-weight:600;'>uid <b style='color:#fff;'>{_uid()}</b></div>
             <div style='color:{col};font-size:0.72rem;margin-top:2px;'>{"●ใช้งานได้ ·เหลือ "+str(days)+"วัน" if days>0 else "●หมดอายุ"}</div>
         </div>""", unsafe_allow_html=True)
-        if st.button("เปลี่ยน Token", use_container_width=True):
-            _set_token(""); st.cache_data.clear(); st.rerun()
+        with st.expander("⚙️ จัดการ Token"):
+            nt = st.text_input("Token ใหม่", type="password", placeholder="วาง JWT token ที่นี่",
+                               label_visibility="collapsed", key="new_token")
+            cc1, cc2 = st.columns(2)
+            if cc1.button("💾 บันทึก", use_container_width=True):
+                if nt.strip():
+                    _set_token(nt.strip()); st.cache_data.clear(); st.rerun()
+            if cc2.button("🗑️ ล้าง", use_container_width=True):
+                _set_token(""); st.cache_data.clear(); st.rerun()
     else:
         st.markdown("<div style='color:#ef4444;font-size:0.8rem;'>⚠️ ใส่ Token เพื่อเริ่มใช้งาน</div>", unsafe_allow_html=True)
         ti = st.text_input("Token", type="password", placeholder="eyJ0eXA...", label_visibility="collapsed")
@@ -483,9 +616,18 @@ with st.sidebar:
     sel_line = st.selectbox("line", ["ทุกสาย"]+list(SRT_LINES.keys()), label_visibility="collapsed")
 
     st.markdown("<div style='color:#38bdf8;font-size:0.74rem;font-weight:700;letter-spacing:0.6px;margin:12px 0 5px;'>📅 วันพยากรณ์</div>", unsafe_allow_html=True)
+    day_mode = st.radio("เลือกแบบ", ["ด่วน","ปฏิทิน"], horizontal=True, label_visibility="collapsed")
     HORIZONS = ["วันนี้","พรุ่งนี้","มะรืน","+3 วัน","+4 วัน","+5 วัน","+6 วัน"]
-    sel_day = st.selectbox("day", HORIZONS, label_visibility="collapsed")
-    day_idx = HORIZONS.index(sel_day)
+    if day_mode == "ด่วน":
+        sel_day = st.selectbox("day", HORIZONS, label_visibility="collapsed")
+        day_idx = HORIZONS.index(sel_day)
+    else:
+        _min = NOW_TH.date()
+        _max = (NOW_TH + timedelta(days=6)).date()
+        picked = st.date_input("เลือกวันที่", value=_min, min_value=_min, max_value=_max,
+                               format="DD/MM/YYYY", label_visibility="collapsed")
+        day_idx = max(0, min(6, (picked - _min).days))
+        sel_day = f"{picked.day} {TH_MONTHS[picked.month]} {picked.year+543}"
 
     st.markdown("<div style='color:#38bdf8;font-size:0.74rem;font-weight:700;letter-spacing:0.6px;margin:12px 0 5px;'>🔴 Real-time</div>", unsafe_allow_html=True)
     auto = st.toggle("เชื่อมข้อมูลอัตโนมัติ", value=False)
@@ -571,6 +713,12 @@ avg_rain = sum(rains)/len(rains) if rains else None
 total_rain = sum(rains) if rains else 0
 avg_temp = sum(temps)/len(temps) if temps else None
 
+# Earthquake data (independent of TMD token)
+eq_data, eq_err = fetch_earthquakes(days=7, min_mag=2.5)
+earthquakes = parse_earthquakes(eq_data)
+eq_felt = [e for e in earthquakes if (e["mag"] or 0) >= 4.5]
+eq_max = max((e["mag"] or 0) for e in earthquakes) if earthquakes else None
+
 # ══════════════════════════════════════════════════════════════
 #  HEADER
 # ══════════════════════════════════════════════════════════════
@@ -580,8 +728,13 @@ st.markdown(f"""
 <div class='cmd-header'>
     <div style='display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;'>
         <div>
-            <h1 class='cmd-title'>🚆 SRT Weather Command Center</h1>
-            <div class='cmd-sub'>ศูนย์เฝ้าระวังปริมาณน้ำฝนและสภาพอากาศ · โครงข่ายรถไฟแห่งประเทศไทย · สำหรับผู้บริหารงานเดินรถ</div>
+            <h1 class='cmd-title'>🚆 ปริมาณน้ำฝนและสภาพอากาศ</h1>
+            <div class='cmd-sub'>ศูนย์ความปลอดภัย ฝ่ายการช่างโยธา · การรถไฟแห่งประเทศไทย</div>
+            <div style='color:#5f8199;font-size:0.74rem;margin-top:3px;'>
+                <span style='background:rgba(212,175,55,0.12);border:1px solid rgba(212,175,55,0.35);
+                color:#d4af37;padding:2px 9px;border-radius:8px;font-weight:600;'>Ver. ทดลอง</span>
+                <span style='margin-left:8px;'>พัฒนาโดย วิศวกรกำกับการกองทางถาวร</span>
+            </div>
         </div>
         <div style='text-align:right;'>
             {_live}
@@ -656,8 +809,9 @@ st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
 # ══════════════════════════════════════════════════════════════
 #  TABS
 # ══════════════════════════════════════════════════════════════
-tab_dash, tab_rain, tab_map, tab_lines, tab_detail = st.tabs([
-    "📊 ภาพรวมผู้บริหาร", "🌧️ ปริมาณน้ำฝน", "🗺️ แผนที่", "🛤️ รายสาย", "🔍 เจาะลึกสถานี"])
+tab_dash, tab_rain, tab_7day, tab_map, tab_lines, tab_quake, tab_detail = st.tabs([
+    "📊 ภาพรวมผู้บริหาร", "🌧️ ปริมาณน้ำฝน", "📈 เสี่ยง 7 วัน", "🗺️ แผนที่",
+    "🛤️ รายสาย", "🌋 แผ่นดินไหว", "🔍 เจาะลึกสถานี"])
 
 # ╔═══════════════════════════════════════════════════════════╗
 # ║  TAB: EXECUTIVE OVERVIEW                                  ║
@@ -842,6 +996,84 @@ with tab_map:
         if not mdf.empty: st.map(mdf, latitude="lat", longitude="lon")
 
 # ╔═══════════════════════════════════════════════════════════╗
+# ║  TAB: 7-DAY RISK ASSESSMENT                               ║
+# ╚═══════════════════════════════════════════════════════════╝
+with tab_7day:
+    st.markdown("<div class='sec-label'>ประเมินความเสี่ยงฝนตกหนักและสภาพอากาศล่วงหน้า 7 วัน</div>", unsafe_allow_html=True)
+    if not api_ok:
+        st.info("ℹ️ ต้องเชื่อมต่อ TMD API ก่อน")
+    else:
+        # Network-wide 7-day heat strip: each station × 7 days
+        labels7 = ["วันนี้","พรุ่งฯ","มะรืน","+3","+4","+5","+6"]
+        # summarise per-day across all stations
+        day_summary = []
+        for di in range(7):
+            day_rains = []
+            for s in station_data:
+                ser = s.get("series", [])
+                if di < len(ser) and ser[di].get("rain") is not None:
+                    day_rains.append(ser[di]["rain"])
+            if day_rains:
+                day_summary.append({
+                    "idx":di, "max":max(day_rains), "avg":sum(day_rains)/len(day_rains),
+                    "n_heavy":sum(1 for r in day_rains if r>=35),
+                    "n_crit":sum(1 for r in day_rains if r>=90)})
+            else:
+                day_summary.append({"idx":di,"max":None,"avg":None,"n_heavy":0,"n_crit":0})
+
+        # 7-day outlook cards
+        st.markdown("<div class='panel'><div class='panel-h'>📅 แนวโน้มความเสี่ยงรวมทั้งเครือข่าย 7 วัน</div>", unsafe_allow_html=True)
+        dcols = st.columns(7)
+        for di, ds in enumerate(day_summary):
+            lv,lab,em,hx,bc = rain_risk(ds["max"])
+            d = NOW_TH + timedelta(days=di)
+            mxd = f"{ds['max']:.0f}" if ds["max"] is not None else "—"
+            with dcols[di]:
+                st.markdown(f"""
+                <div style='background:#0e1a29;border:1px solid #1c3247;border-top:3px solid {hx};
+                    border-radius:12px;padding:12px 6px;text-align:center;'>
+                    <div style='color:#5f8199;font-size:0.68rem;'>{labels7[di]}</div>
+                    <div style='color:#9fbcd0;font-size:0.66rem;'>{d.day} {TH_MONTHS[d.month]}</div>
+                    <div style='font-size:1.7rem;margin:5px 0;'>{em}</div>
+                    <div style='font-family:Kanit;color:{hx};font-weight:700;font-size:1.15rem;'>{mxd}</div>
+                    <div style='color:#5f8199;font-size:0.64rem;'>มม.สูงสุด</div>
+                    <div style='margin-top:5px;font-size:0.66rem;color:{"#ef4444" if ds["n_heavy"] else "#5f8199"};'>
+                        {("⚠️ "+str(ds["n_heavy"])+" สถานี") if ds["n_heavy"] else "ปกติ"}
+                    </div>
+                </div>""", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
+
+        # Per-station 7-day risk matrix (heat strip)
+        st.markdown("<div class='panel'><div class='panel-h'>🌡️ ตารางความเสี่ยงรายสถานี × 7 วัน (ปริมาณฝน มม.)</div>", unsafe_allow_html=True)
+        # header
+        hdr = "<div style='display:grid;grid-template-columns:170px repeat(7,1fr);gap:4px;margin-bottom:6px;'>"
+        hdr += "<div style='color:#5f8199;font-size:0.72rem;'>สถานี \\ วัน</div>"
+        for di in range(7):
+            d = NOW_TH + timedelta(days=di)
+            hdr += f"<div style='text-align:center;color:#5f8199;font-size:0.68rem;'>{labels7[di]}<br>{d.day}/{d.month}</div>"
+        hdr += "</div>"
+        st.markdown(hdr, unsafe_allow_html=True)
+        # rows — only stations that have a risk day, else show top 15 by peak
+        ranked_stn = sorted(station_data,
+            key=lambda s: max([f.get("rain") or 0 for f in s.get("series",[])[:7]] or [0]), reverse=True)
+        for s in ranked_stn[:18]:
+            ser = s.get("series", [])
+            row = f"<div style='display:grid;grid-template-columns:170px repeat(7,1fr);gap:4px;margin:2px 0;align-items:center;'>"
+            row += f"<div style='color:#e8f1f8;font-size:0.76rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>{s['line_icon']} {s['name']}</div>"
+            for di in range(7):
+                if di < len(ser) and ser[di].get("rain") is not None:
+                    r = ser[di]["rain"]; hx = rain_hex(r)
+                    txt = f"{r:.0f}"
+                    row += f"<div style='background:{hx};color:#fff;text-align:center;border-radius:5px;padding:5px 0;font-size:0.72rem;font-weight:600;'>{txt}</div>"
+                else:
+                    row += "<div style='background:rgba(255,255,255,0.04);text-align:center;border-radius:5px;padding:5px 0;color:#3a5570;font-size:0.72rem;'>—</div>"
+            row += "</div>"
+            st.markdown(row, unsafe_allow_html=True)
+        st.markdown("<div style='color:#5f8199;font-size:0.72rem;margin-top:8px;'>🟢 0-10 · 🔵 10-35 · 🟠 35-90 · 🔴 >90 มม./วัน · แสดง 18 สถานีเสี่ยงสูงสุด</div></div>", unsafe_allow_html=True)
+
+# ╔═══════════════════════════════════════════════════════════╗
 # ║  TAB: PER LINE                                            ║
 # ╚═══════════════════════════════════════════════════════════╝
 with tab_lines:
@@ -877,6 +1109,86 @@ with tab_lines:
                 st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True,
                     column_config={"ฝน (มม.)":st.column_config.NumberColumn("🌧️ ฝน (มม.)",format="%.1f"),
                                    "RH%":st.column_config.NumberColumn("💧 RH%",format="%.0f")})
+
+# ╔═══════════════════════════════════════════════════════════╗
+# ║  TAB: EARTHQUAKE                                          ║
+# ╚═══════════════════════════════════════════════════════════╝
+with tab_quake:
+    st.markdown("<div class='sec-label'>รายงานแผ่นดินไหว — ประเทศไทยและภูมิภาคใกล้เคียง (7 วันล่าสุด)</div>", unsafe_allow_html=True)
+
+    # KPI row for earthquakes
+    qk = st.columns(4)
+    qk[0].markdown(f"""<div class='kpi c-warn'><div class='kpi-top'><span class='kpi-ico'>🌋</span><span class='kpi-tag'>7 วัน</span></div>
+        <div class='kpi-val'>{len(earthquakes)}</div><div class='kpi-lab'>เหตุการณ์ทั้งหมด</div>
+        <div class='kpi-foot'>M ≥ 2.5 ในภูมิภาค</div></div>""", unsafe_allow_html=True)
+    qk[1].markdown(f"""<div class='kpi c-crit'><div class='kpi-top'><span class='kpi-ico'>📊</span><span class='kpi-tag'>สูงสุด</span></div>
+        <div class='kpi-val'>{f"{eq_max:.1f}" if eq_max else "—"}</div><div class='kpi-lab'>ขนาดใหญ่สุด (M)</div>
+        <div class='kpi-foot'>มาตราริกเตอร์</div></div>""", unsafe_allow_html=True)
+    qk[2].markdown(f"""<div class='kpi c-info'><div class='kpi-top'><span class='kpi-ico'>📢</span><span class='kpi-tag'>รู้สึกได้</span></div>
+        <div class='kpi-val'>{len(eq_felt)}</div><div class='kpi-lab'>M ≥ 4.5</div>
+        <div class='kpi-foot'>อาจรู้สึกสั่นไหว</div></div>""", unsafe_allow_html=True)
+    qk[3].markdown(f"""<div class='kpi c-ok'><div class='kpi-top'><span class='kpi-ico'>🛰️</span><span class='kpi-tag'>แหล่งข้อมูล</span></div>
+        <div class='kpi-val' style='font-size:1.3rem;'>USGS</div><div class='kpi-lab'>+ กรมอุตุฯ</div>
+        <div class='kpi-foot'>{"●เชื่อมต่อ" if earthquakes else "○ "+str(eq_err)[:20]}</div></div>""", unsafe_allow_html=True)
+
+    st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+
+    cmap, clist = st.columns([1.1, 1])
+
+    # Earthquake map
+    with cmap:
+        st.markdown("<div class='panel'><div class='panel-h'>🗺️ ตำแหน่งจุดศูนย์กลาง</div>", unsafe_allow_html=True)
+        try:
+            import folium
+            from streamlit_folium import st_folium
+            qm = folium.Map(location=[15.0,101.0], zoom_start=5, tiles=None)
+            folium.TileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+                             attr="© CARTO", max_zoom=19).add_to(qm)
+            # draw rail lines faint for context
+            for ln, ld in SRT_LINES.items():
+                coords=[[s["lat"],s["lon"]] for s in ld["stations"]]
+                folium.PolyLine(coords, color="#38bdf8", weight=1.5, opacity=0.35).add_to(qm)
+            for e in earthquakes:
+                if e["lat"] is None or e["lon"] is None: continue
+                mag = e["mag"] or 0
+                rad = 3 + mag*2.2
+                col = "#ef4444" if mag>=5 else "#f59e0b" if mag>=4 else "#fbbf24" if mag>=3 else "#94a3b8"
+                folium.CircleMarker(
+                    [e["lat"],e["lon"]], radius=rad, color=col, fill=True, fill_color=col, fill_opacity=0.55,
+                    popup=folium.Popup(f"<b>M {mag}</b><br>{e['place']}<br>{e['time']}<br>ลึก {e['depth']} กม.", max_width=240),
+                    tooltip=f"M{mag} · {e['time']}").add_to(qm)
+            st_folium(qm, width="100%", height=460, returned_objects=[])
+        except ImportError:
+            qdf = pd.DataFrame([{"lat":e["lat"],"lon":e["lon"]} for e in earthquakes if e["lat"]])
+            if not qdf.empty: st.map(qdf, latitude="lat", longitude="lon")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # Earthquake list
+    with clist:
+        st.markdown("<div class='panel'><div class='panel-h'>📋 เหตุการณ์ล่าสุด</div>", unsafe_allow_html=True)
+        if not earthquakes:
+            st.markdown(f"<p style='color:#5f8199;font-size:0.84rem;'>ไม่พบเหตุการณ์ หรือเชื่อมต่อ USGS ไม่ได้ ({eq_err})</p>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div style='max-height:430px;overflow-y:auto;'>", unsafe_allow_html=True)
+            for e in earthquakes[:25]:
+                mag = e["mag"] or 0
+                col = "#ef4444" if mag>=5 else "#f59e0b" if mag>=4 else "#fbbf24" if mag>=3 else "#94a3b8"
+                st.markdown(f"""
+                <div style='display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid rgba(28,50,71,0.5);'>
+                    <div style='min-width:44px;height:44px;border-radius:10px;background:{col}22;border:1px solid {col};
+                        display:flex;align-items:center;justify-content:center;flex-direction:column;'>
+                        <span style='font-family:Kanit;font-weight:700;color:{col};font-size:1.05rem;line-height:1;'>{mag:.1f}</span>
+                        <span style='color:{col};font-size:0.56rem;'>MAG</span>
+                    </div>
+                    <div style='flex:1;min-width:0;'>
+                        <div style='color:#e8f1f8;font-size:0.8rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>{e['place']}</div>
+                        <div style='color:#5f8199;font-size:0.72rem;'>🕐 {e['time']} · ลึก {e['depth']:.0f} กม.</div>
+                    </div>
+                </div>""", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.caption("ℹ️ ข้อมูลแผ่นดินไหวจาก USGS (United States Geological Survey) ครอบคลุมไทย เมียนมา ลาว กัมพูชา เวียดนามใต้ และทะเลอันดามัน · สามารถตรวจสอบเพิ่มเติมที่กรมอุตุนิยมวิทยา")
 
 # ╔═══════════════════════════════════════════════════════════╗
 # ║  TAB: STATION DEEP-DIVE                                   ║
