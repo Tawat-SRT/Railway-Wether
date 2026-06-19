@@ -1,7 +1,7 @@
 """
 🚆 SRT Weather Command Center
-ศูนย์เฝ้าระวังสภาพอากาศและปริมาณน้ำฝน · โครงข่ายรถไฟแห่งประเทศไทย
-สำหรับผู้บริหารงานเดินรถ · ข้อมูลจากกรมอุตุนิยมวิทยา (TMD NWP API v1)
+ศูนย์เฝ้าระวังสภาพอากาศและปริมาณน้ำฝน · ศูนย์ความปลอดภัย ฝ่ายการช่างโยธา
+สำหรับผู้บริหารและนักบำรุงทาง · ข้อมูลจากกรมอุตุนิยมวิทยา (TMD NWP API v1)
 """
 
 import streamlit as st
@@ -36,46 +36,50 @@ def th_datetime(dt):
 # ══════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&family=Kanit:wght@500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&family=Kanit:wght@400;500;600;700;800&display=swap');
 
 *, html, body, [class*="css"] { font-family: 'Sarabun', sans-serif !important; }
 h1,h2,h3,.kanit { font-family: 'Kanit', sans-serif !important; }
 
 :root {
-    --bg0:#070d15; --bg1:#0b1420; --bg2:#101d2e; --panel:#0e1a29;
-    --line:#1c3247; --line2:#24405a;
-    --ink:#e8f1f8; --ink2:#9fbcd0; --ink3:#5f8199;
-    --accent:#38bdf8; --gold:#d4af37;
-    --ok:#10b981; --info:#3b82f6; --warn:#f59e0b; --crit:#ef4444;
+    --bg0:#f4f7fb; --bg1:#ffffff; --bg2:#eef3f9; --panel:#ffffff;
+    --line:#e3eaf2; --line2:#d3deeb;
+    --ink:#1a2b42; --ink2:#5a6e88; --ink3:#90a2bb;
+    --accent:#2563eb; --accent2:#0ea5e9; --gold:#c79a2e;
+    --ok:#059669; --info:#2563eb; --warn:#e8820c; --crit:#dc2626;
+    --shadow: 0 2px 8px rgba(30,58,95,0.06), 0 8px 24px rgba(30,58,95,0.05);
+    --shadow-lg: 0 8px 30px rgba(30,58,95,0.10);
 }
 
+/* ── soft pastel aurora background ── */
 .stApp {
     background:
-        radial-gradient(900px 600px at 85% -5%, rgba(56,189,248,0.10), transparent 60%),
-        radial-gradient(700px 500px at 10% 5%, rgba(212,175,55,0.06), transparent 55%),
-        radial-gradient(800px 700px at 50% 110%, rgba(99,102,241,0.07), transparent 60%),
-        linear-gradient(180deg, #060b13 0%, #0a1320 50%, #070d16 100%);
+        radial-gradient(820px 540px at 88% -8%, rgba(37,99,235,0.07), transparent 60%),
+        radial-gradient(680px 520px at 6% 4%, rgba(14,165,233,0.06), transparent 58%),
+        radial-gradient(760px 660px at 50% 112%, rgba(139,92,246,0.05), transparent 60%),
+        linear-gradient(180deg, #f6f9fd 0%, #eef3fa 55%, #f4f7fb 100%);
     background-attachment: fixed;
 }
 .stApp::before {
     content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
     background-image:
-        linear-gradient(rgba(56,189,248,0.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(56,189,248,0.025) 1px, transparent 1px);
-    background-size: 44px 44px;
-    mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, #000 40%, transparent 90%);
-    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, #000 40%, transparent 90%);
+        linear-gradient(rgba(37,99,235,0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(37,99,235,0.035) 1px, transparent 1px);
+    background-size: 46px 46px;
+    mask-image: radial-gradient(ellipse 75% 55% at 50% 25%, #000 35%, transparent 88%);
+    -webkit-mask-image: radial-gradient(ellipse 75% 55% at 50% 25%, #000 35%, transparent 88%);
 }
 .block-container { padding-top: 1.4rem !important; max-width: 1500px; position:relative; z-index:1; }
 
-/* Sidebar */
+/* ── Sidebar (clean white) ── */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg,#060c14,#0a1622) !important;
+    background: linear-gradient(180deg,#ffffff,#f3f7fc) !important;
     border-right: 1px solid var(--line) !important;
 }
 [data-testid="stSidebar"] * { color: var(--ink2) !important; }
+[data-testid="stSidebar"] h1,[data-testid="stSidebar"] h2,[data-testid="stSidebar"] h3 { color: var(--ink) !important; }
 
-/* Hide default header + top-right toolbar/menu/deploy button */
+/* hide top-right controls */
 [data-testid="stHeader"] { background: transparent !important; }
 [data-testid="stToolbar"] { display: none !important; }
 [data-testid="stDecoration"] { display: none !important; }
@@ -85,92 +89,75 @@ header { visibility: hidden !important; }
 footer { visibility: hidden !important; }
 .stDeployButton { display: none !important; }
 
-/* ── Command header ── */
+/* ── Command header (light, glassy) ── */
 .cmd-header {
-    background: linear-gradient(110deg, #0c1d30 0%, #103456 45%, #0c1d30 100%);
+    background: linear-gradient(110deg, #ffffff 0%, #eaf2fe 50%, #ffffff 100%);
     border: 1px solid var(--line2);
-    border-radius: 16px;
+    border-radius: 18px;
     padding: 22px 28px;
     position: relative; overflow: hidden;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04);
+    box-shadow: var(--shadow-lg);
 }
 .cmd-header::before {
-    content:''; position:absolute; inset:0; pointer-events:none;
-    background: repeating-linear-gradient(90deg, transparent 0 38px, rgba(212,175,55,0.05) 38px 40px);
+    content:''; position:absolute; left:0; top:0; bottom:0; width:6px;
+    background: linear-gradient(180deg,#2563eb,#0ea5e9);
 }
-.cmd-title { font-size:1.75rem; font-weight:800; color:#fff; margin:0;
-    letter-spacing:0.3px; display:flex; align-items:center; gap:12px; }
-.cmd-sub { color:var(--ink2); font-size:0.86rem; margin-top:5px; }
+.cmd-title { font-size:1.75rem; font-weight:800; color:var(--ink); margin:0;
+    letter-spacing:0.2px; display:flex; align-items:center; gap:12px; }
+.cmd-sub { color:var(--ink2); font-size:0.88rem; margin-top:5px; font-weight:600; }
 .cmd-live {
     display:inline-flex; align-items:center; gap:6px;
-    background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.4);
-    color:#34d399; font-size:0.74rem; font-weight:700; padding:3px 12px;
-    border-radius:20px;
+    background:rgba(5,150,105,0.10); border:1px solid rgba(5,150,105,0.30);
+    color:#059669; font-size:0.74rem; font-weight:700; padding:4px 13px; border-radius:20px;
 }
-.pulse { width:8px; height:8px; border-radius:50%; background:#34d399;
-    box-shadow:0 0 0 0 rgba(52,211,153,0.6); animation:pulse 2s infinite; }
-@keyframes pulse {
-    0%{box-shadow:0 0 0 0 rgba(52,211,153,0.6);}
-    70%{box-shadow:0 0 0 8px rgba(52,211,153,0);}
-    100%{box-shadow:0 0 0 0 rgba(52,211,153,0);}
-}
+.pulse { width:8px; height:8px; border-radius:50%; background:#10b981;
+    box-shadow:0 0 0 0 rgba(16,185,129,0.5); animation:pulse 2s infinite; }
+@keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(16,185,129,0.5);} 70%{box-shadow:0 0 0 8px rgba(16,185,129,0);} 100%{box-shadow:0 0 0 0 rgba(16,185,129,0);} }
 
 /* ── Alert banner ── */
-.alert-banner {
-    border-radius:14px; padding:16px 22px; margin:14px 0;
-    display:flex; align-items:center; gap:16px;
-    border:1px solid; position:relative; overflow:hidden;
-}
-.ab-crit { background:linear-gradient(100deg,rgba(239,68,68,0.22),rgba(120,20,20,0.28)); border-color:rgba(239,68,68,0.5); }
-.ab-warn { background:linear-gradient(100deg,rgba(245,158,11,0.18),rgba(120,80,10,0.22)); border-color:rgba(245,158,11,0.45); }
-.ab-ok   { background:linear-gradient(100deg,rgba(16,185,129,0.15),rgba(10,80,60,0.2)); border-color:rgba(16,185,129,0.4); }
+.alert-banner { border-radius:16px; padding:16px 22px; margin:14px 0;
+    display:flex; align-items:center; gap:16px; border:1px solid; box-shadow:var(--shadow); }
+.ab-crit { background:linear-gradient(100deg,#fef2f2,#fee2e2); border-color:#fca5a5; }
+.ab-warn { background:linear-gradient(100deg,#fffbeb,#fef3c7); border-color:#fcd34d; }
+.ab-ok   { background:linear-gradient(100deg,#f0fdf4,#dcfce7); border-color:#86efac; }
 .ab-icon { font-size:2.4rem; line-height:1; }
-.ab-text h3 { margin:0; font-size:1.2rem; color:#fff; }
-.ab-text p  { margin:2px 0 0; font-size:0.88rem; color:var(--ink2); }
+.ab-text h3 { margin:0; font-size:1.18rem; color:var(--ink); }
+.ab-text p  { margin:3px 0 0; font-size:0.88rem; color:var(--ink2); }
 
 /* ── KPI tiles ── */
-.kpi {
-    background: linear-gradient(160deg, var(--panel), #0a1521);
-    border:1px solid var(--line);
-    border-radius:14px; padding:18px 20px; height:100%;
-    position:relative; overflow:hidden;
-    transition: transform .12s, box-shadow .12s, border-color .12s;
-}
-.kpi:hover { transform:translateY(-2px); box-shadow:0 10px 28px rgba(0,0,0,0.35); border-color:var(--line2); }
-.kpi::after { content:''; position:absolute; top:0; left:0; width:100%; height:3px; background:var(--c,#38bdf8); }
+.kpi { background:var(--panel); border:1px solid var(--line); border-radius:16px;
+    padding:18px 20px; height:100%; position:relative; overflow:hidden;
+    box-shadow:var(--shadow); transition:transform .14s, box-shadow .14s; }
+.kpi:hover { transform:translateY(-3px); box-shadow:var(--shadow-lg); }
+.kpi::after { content:''; position:absolute; top:0; left:0; width:100%; height:4px; background:var(--c,#2563eb); }
 .kpi-top { display:flex; align-items:center; justify-content:space-between; }
 .kpi-ico { font-size:1.5rem; }
-.kpi-tag { font-size:0.66rem; font-weight:700; padding:2px 8px; border-radius:10px;
-    background:rgba(255,255,255,0.06); color:var(--ink3); text-transform:uppercase; letter-spacing:0.5px; }
-.kpi-val { font-family:'Kanit',sans-serif; font-size:2.1rem; font-weight:700; color:#fff; line-height:1; margin:10px 0 2px; }
+.kpi-tag { font-size:0.66rem; font-weight:700; padding:3px 9px; border-radius:10px;
+    background:var(--bg2); color:var(--ink3); text-transform:uppercase; letter-spacing:0.5px; }
+.kpi-val { font-family:'Kanit',sans-serif; font-size:2.1rem; font-weight:700; color:var(--ink); line-height:1; margin:10px 0 2px; }
 .kpi-val small { font-size:0.85rem; color:var(--ink2); font-weight:500; margin-left:3px; }
-.kpi-lab { color:var(--ink2); font-size:0.82rem; }
+.kpi-lab { color:var(--ink2); font-size:0.82rem; font-weight:600; }
 .kpi-foot { color:var(--ink3); font-size:0.74rem; margin-top:6px; }
-.c-crit{--c:#ef4444;} .c-warn{--c:#f59e0b;} .c-info{--c:#3b82f6;}
-.c-ok{--c:#10b981;} .c-gold{--c:#d4af37;} .c-cyan{--c:#38bdf8;}
+.c-crit{--c:#dc2626;} .c-warn{--c:#e8820c;} .c-info{--c:#2563eb;}
+.c-ok{--c:#059669;} .c-gold{--c:#c79a2e;} .c-cyan{--c:#0ea5e9;}
 
 /* ── Panel ── */
-.panel {
-    background: linear-gradient(160deg, var(--panel), #0a1521);
-    border:1px solid var(--line); border-radius:14px; padding:18px 20px; height:100%;
-}
-.panel-h { font-family:'Kanit',sans-serif; color:var(--accent); font-size:0.92rem;
-    font-weight:600; margin:0 0 14px; display:flex; align-items:center; gap:8px;
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:16px;
+    padding:18px 20px; height:100%; box-shadow:var(--shadow); }
+.panel-h { font-family:'Kanit',sans-serif; color:var(--ink); font-size:0.95rem; font-weight:600;
+    margin:0 0 14px; display:flex; align-items:center; gap:8px;
     border-bottom:1px solid var(--line); padding-bottom:10px; }
 
-/* ── Rain bar (executive) ── */
-.rain-row { display:grid; grid-template-columns:130px 1fr 64px; align-items:center;
-    gap:12px; padding:7px 0; }
-.rain-name { color:var(--ink); font-size:0.84rem; font-weight:500; white-space:nowrap;
-    overflow:hidden; text-overflow:ellipsis; }
-.rain-track { background:rgba(255,255,255,0.05); border-radius:8px; height:22px; position:relative; overflow:hidden; }
+/* ── Rain bar ── */
+.rain-row { display:grid; grid-template-columns:130px 1fr 64px; align-items:center; gap:12px; padding:7px 0; }
+.rain-name { color:var(--ink); font-size:0.84rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rain-track { background:var(--bg2); border-radius:8px; height:22px; position:relative; overflow:hidden; }
 .rain-fill { height:100%; border-radius:8px; display:flex; align-items:center; justify-content:flex-end;
     padding-right:8px; transition:width .5s cubic-bezier(.4,0,.2,1); min-width:2px; }
-.rain-val { text-align:right; font-family:'Kanit',sans-serif; font-weight:600; font-size:0.9rem; }
+.rain-val { text-align:right; font-family:'Kanit',sans-serif; font-weight:700; font-size:0.9rem; }
 
-/* ── Risk list item ── */
-.risk-item { display:flex; align-items:center; gap:12px; padding:10px 0;
-    border-bottom:1px solid rgba(28,50,71,0.5); }
+/* ── Risk list ── */
+.risk-item { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--line); }
 .risk-rank { font-family:'Kanit',sans-serif; font-weight:700; font-size:1.1rem; color:var(--ink3); width:24px; text-align:center; }
 .risk-body { flex:1; min-width:0; }
 .risk-stn { color:var(--ink); font-weight:600; font-size:0.88rem; }
@@ -179,51 +166,54 @@ footer { visibility: hidden !important; }
 
 /* ── badges ── */
 .bdg { padding:3px 10px; border-radius:20px; font-size:0.72rem; font-weight:700; white-space:nowrap; }
-.bdg-crit{ background:#7f1d1d; color:#fecaca; } .bdg-warn{ background:#78350f; color:#fde68a; }
-.bdg-info{ background:#1e3a5f; color:#bfdbfe; } .bdg-ok{ background:#064e3b; color:#a7f3d0; }
-.bdg-na{ background:#1f2937; color:#9ca3af; }
-
-/* ── Metric chips ── */
-.chips { display:flex; gap:16px; flex-wrap:wrap; }
-.chip { display:flex; align-items:center; gap:7px; color:var(--ink2); font-size:0.82rem; }
-.chip b { color:var(--ink); }
+.bdg-crit{ background:#fee2e2; color:#b91c1c; } .bdg-warn{ background:#fef3c7; color:#b45309; }
+.bdg-info{ background:#dbeafe; color:#1d4ed8; } .bdg-ok{ background:#dcfce7; color:#047857; }
+.bdg-na{ background:#eef2f6; color:#64748b; }
 
 /* ── Streamlit overrides ── */
 .stTabs [data-baseweb="tab-list"] { background:var(--bg1); border:1px solid var(--line);
-    border-radius:12px; gap:3px; padding:5px; }
-.stTabs [data-baseweb="tab"] { color:var(--ink3); border-radius:8px; padding:8px 20px; font-weight:600; }
-.stTabs [aria-selected="true"] { background:linear-gradient(135deg,#103456,#0c2640); color:#fff !important; }
+    border-radius:14px; gap:3px; padding:5px; box-shadow:var(--shadow); }
+.stTabs [data-baseweb="tab"] { color:var(--ink3); border-radius:10px; padding:8px 18px; font-weight:600; }
+.stTabs [aria-selected="true"] { background:linear-gradient(135deg,#2563eb,#0ea5e9); color:#fff !important; }
+.stTabs [data-baseweb="tab"]:hover { color:var(--accent); }
 
 div[data-testid="stMetric"]{ background:var(--panel); border:1px solid var(--line);
-    border-radius:12px; padding:14px 16px; }
+    border-radius:14px; padding:14px 16px; box-shadow:var(--shadow); }
 div[data-testid="stMetric"] label{ color:var(--ink3) !important; font-size:0.76rem !important; }
-div[data-testid="stMetric"] [data-testid="stMetricValue"]{ color:#fff !important; font-family:'Kanit'; }
+div[data-testid="stMetric"] [data-testid="stMetricValue"]{ color:var(--ink) !important; font-family:'Kanit'; }
 
-div[data-baseweb="select"] > div{ background:var(--bg2) !important; border-color:var(--line2) !important; }
+div[data-baseweb="select"] > div{ background:var(--bg1) !important; border-color:var(--line2) !important; }
 div[data-baseweb="select"] *{ color:var(--ink) !important; }
+.stTextInput input, .stDateInput input { background:var(--bg1) !important; color:var(--ink) !important; border-color:var(--line2) !important; }
 
-.stButton > button{ background:linear-gradient(135deg,#103456,#0c2640) !important;
-    color:var(--ink) !important; border:1px solid var(--line2) !important;
-    border-radius:10px !important; font-weight:600 !important; }
-.stButton > button:hover{ border-color:var(--accent) !important;
-    box-shadow:0 0 16px rgba(56,189,248,0.2) !important; }
+.stButton > button{ background:linear-gradient(135deg,#2563eb,#0ea5e9) !important; color:#fff !important;
+    border:none !important; border-radius:11px !important; font-weight:700 !important; box-shadow:var(--shadow); }
+.stButton > button:hover{ box-shadow:0 4px 18px rgba(37,99,235,0.35) !important; transform:translateY(-1px); }
 
-div[data-testid="stExpander"]{ background:var(--panel) !important; border:1px solid var(--line) !important; border-radius:12px !important; }
-.stDataFrame{ border-radius:10px !important; overflow:hidden !important; }
+div[data-testid="stExpander"]{ background:var(--panel) !important; border:1px solid var(--line) !important;
+    border-radius:14px !important; box-shadow:var(--shadow); }
+div[data-testid="stExpander"] summary { color:var(--ink) !important; font-weight:600; }
+.stDataFrame{ border-radius:12px !important; overflow:hidden !important; border:1px solid var(--line); }
 
-::-webkit-scrollbar{ width:6px; height:6px; }
-::-webkit-scrollbar-track{ background:var(--bg0); }
-::-webkit-scrollbar-thumb{ background:var(--line2); border-radius:3px; }
+[data-testid="stToggle"] label, .stRadio label, .stCheckbox label { color:var(--ink2) !important; }
 
-.sec-label { font-family:'Kanit',sans-serif; color:var(--ink); font-size:1.05rem;
-    font-weight:600; margin:6px 0 12px; display:flex; align-items:center; gap:10px; }
-.sec-label::before { content:''; width:4px; height:18px; background:var(--accent); border-radius:2px; }
+::-webkit-scrollbar{ width:8px; height:8px; }
+::-webkit-scrollbar-track{ background:var(--bg2); }
+::-webkit-scrollbar-thumb{ background:#c2d1e3; border-radius:4px; }
+::-webkit-scrollbar-thumb:hover{ background:#a9bcd4; }
+
+.sec-label { font-family:'Kanit',sans-serif; color:var(--ink); font-size:1.05rem; font-weight:600;
+    margin:6px 0 12px; display:flex; align-items:center; gap:10px; }
+.sec-label::before { content:''; width:4px; height:18px; background:linear-gradient(180deg,#2563eb,#0ea5e9); border-radius:2px; }
 </style>
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════
-#  TOKEN
+#  TOKEN  — วางครั้งเดียว จดจำถาวร (session + ไฟล์ในเครื่อง)
 # ══════════════════════════════════════════════════════════════
+import os
+_TK_FILE = os.path.join(os.path.expanduser("~"), ".srt_weather_token")
+
 def _decode_jwt(token):
     try:
         p = token.split(".")[1]; p += "=" * (-len(p) % 4)
@@ -231,21 +221,48 @@ def _decode_jwt(token):
     except Exception:
         return {}
 
+def _save_token_file(raw):
+    """บันทึก token ลงไฟล์เพื่อจดจำข้ามการรีสตาร์ท (best-effort)"""
+    try:
+        if raw:
+            with open(_TK_FILE, "w") as f: f.write(raw)
+        elif os.path.exists(_TK_FILE):
+            os.remove(_TK_FILE)
+    except Exception:
+        pass
+
+def _load_token_file():
+    try:
+        if os.path.exists(_TK_FILE):
+            with open(_TK_FILE) as f: return f.read().strip()
+    except Exception:
+        pass
+    return ""
+
 def _set_token(raw):
     raw = (raw or "").strip()
     st.session_state["_tk"] = raw
     st.session_state["_tk_jwt"] = _decode_jwt(raw)
     st.session_state["_tk_uid"] = str(st.session_state["_tk_jwt"].get("sub",""))
+    _save_token_file(raw)
 
 if "_tk" not in st.session_state:
     _boot = ""
+    # 1) Streamlit secrets
     try:
         _boot = str(st.secrets.get("TMD_TOKEN","") or st.secrets.get("tmd_token",""))
     except Exception:
         pass
+    # 2) environment variable
     if not _boot:
-        import os; _boot = os.environ.get("TMD_TOKEN","")
-    _set_token(_boot)
+        _boot = os.environ.get("TMD_TOKEN","")
+    # 3) ไฟล์ที่เคยบันทึกไว้ (จดจำหลังวางครั้งแรก)
+    if not _boot:
+        _boot = _load_token_file()
+    # set without re-writing file if it came from the file already
+    st.session_state["_tk"] = _boot.strip()
+    st.session_state["_tk_jwt"] = _decode_jwt(_boot.strip())
+    st.session_state["_tk_uid"] = str(st.session_state["_tk_jwt"].get("sub",""))
 
 def _token(): return st.session_state.get("_tk","")
 def _uid():   return st.session_state.get("_tk_uid","")
@@ -578,9 +595,9 @@ with st.sidebar:
     st.markdown("""
     <div style='text-align:center;padding:10px 0 16px;'>
         <div style='font-size:2.6rem;'>🚆</div>
-        <div style='font-family:Kanit;color:#fff;font-size:1.0rem;font-weight:700;line-height:1.3;'>ศูนย์ความปลอดภัย</div>
-        <div style='color:#9fbcd0;font-size:0.78rem;'>ฝ่ายการช่างโยธา</div>
-        <div style='color:#5f8199;font-size:0.7rem;letter-spacing:0.5px;margin-top:2px;'>การรถไฟแห่งประเทศไทย</div>
+        <div style='font-family:Kanit;color:#1a2b42;font-size:1.0rem;font-weight:700;line-height:1.3;'>ศูนย์ความปลอดภัย</div>
+        <div style='color:#5a6e88;font-size:0.78rem;'>ฝ่ายการช่างโยธา</div>
+        <div style='color:#90a2bb;font-size:0.7rem;letter-spacing:0.5px;margin-top:2px;'>การรถไฟแห่งประเทศไทย</div>
     </div>""", unsafe_allow_html=True)
 
     # Token
@@ -588,15 +605,21 @@ with st.sidebar:
         jd = _jwt(); exp = jd.get("exp",0)
         exp_dt = datetime.fromtimestamp(exp, tz=TZ_TH) if exp else None
         days = (exp_dt - NOW_TH).days if exp_dt else 0
-        col = "#10b981" if days>30 else "#f59e0b" if days>0 else "#ef4444"
+        col = "#059669" if days>30 else "#e8820c" if days>0 else "#dc2626"
         st.markdown(f"""
-        <div style='background:rgba(10,20,35,0.8);border:1px solid #1c3247;border-radius:10px;padding:10px 14px;margin-bottom:10px;'>
-            <div style='color:#5f8199;font-size:0.7rem;'>🔑 TMD NWP API</div>
-            <div style='color:#38bdf8;font-size:0.8rem;font-weight:600;'>uid <b style='color:#fff;'>{_uid()}</b></div>
-            <div style='color:{col};font-size:0.72rem;margin-top:2px;'>{"●ใช้งานได้ ·เหลือ "+str(days)+"วัน" if days>0 else "●หมดอายุ"}</div>
+        <div style='background:linear-gradient(135deg,#eef6ff,#f3f7fc);border:1px solid #d3deeb;border-radius:12px;padding:11px 15px;margin-bottom:8px;box-shadow:0 2px 8px rgba(30,58,95,0.05);'>
+            <div style='display:flex;align-items:center;justify-content:space-between;'>
+                <div style='color:#90a2bb;font-size:0.7rem;font-weight:600;'>🔑 TMD NWP API</div>
+                <div style='width:8px;height:8px;border-radius:50%;background:{col};box-shadow:0 0 8px {col}99;'></div>
+            </div>
+            <div style='color:#2563eb;font-size:0.82rem;font-weight:700;margin-top:2px;'>uid <b style='color:#1a2b42;'>{_uid()}</b></div>
+            <div style='color:{col};font-size:0.72rem;margin-top:2px;font-weight:600;'>{"เชื่อมต่อแล้ว · เหลือ "+str(days)+" วัน" if days>0 else "Token หมดอายุ"}</div>
         </div>""", unsafe_allow_html=True)
-        with st.expander("⚙️ จัดการ Token"):
-            nt = st.text_input("Token ใหม่", type="password", placeholder="วาง JWT token ที่นี่",
+        # slide toggle to reveal token management
+        show_tk = st.toggle("🔧 แก้ไข / เปลี่ยน Token", value=False, key="show_token_mgmt")
+        if show_tk:
+            st.caption("Token ถูกบันทึกไว้แล้ว ใช้ได้ทันทีทุกครั้งที่เปิด — แก้ไขเฉพาะเมื่อต้องการเปลี่ยน")
+            nt = st.text_input("Token ใหม่", type="password", placeholder="วาง JWT token ใหม่ที่นี่",
                                label_visibility="collapsed", key="new_token")
             cc1, cc2 = st.columns(2)
             if cc1.button("💾 บันทึก", use_container_width=True):
@@ -605,17 +628,17 @@ with st.sidebar:
             if cc2.button("🗑️ ล้าง", use_container_width=True):
                 _set_token(""); st.cache_data.clear(); st.rerun()
     else:
-        st.markdown("<div style='color:#ef4444;font-size:0.8rem;'>⚠️ ใส่ Token เพื่อเริ่มใช้งาน</div>", unsafe_allow_html=True)
+        st.markdown("<div style='background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;padding:11px 15px;margin-bottom:8px;color:#b91c1c;font-size:0.82rem;font-weight:600;'>⚠️ วาง Token ครั้งเดียว ระบบจะจดจำไว้ให้</div>", unsafe_allow_html=True)
         ti = st.text_input("Token", type="password", placeholder="eyJ0eXA...", label_visibility="collapsed")
-        if st.button("✅ เชื่อมต่อ", use_container_width=True):
+        if st.button("✅ เชื่อมต่อและบันทึก", use_container_width=True):
             if ti.strip(): _set_token(ti.strip()); st.cache_data.clear(); st.rerun()
 
-    st.markdown("<hr style='border-color:#1c3247;margin:14px 0;'>", unsafe_allow_html=True)
+    st.markdown("<hr style='border-color:#e3eaf2;margin:14px 0;'>", unsafe_allow_html=True)
 
-    st.markdown("<div style='color:#38bdf8;font-size:0.74rem;font-weight:700;letter-spacing:0.6px;margin-bottom:5px;'>🛤️ เส้นทาง</div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:#2563eb;font-size:0.74rem;font-weight:700;letter-spacing:0.6px;margin-bottom:5px;'>🛤️ เส้นทาง</div>", unsafe_allow_html=True)
     sel_line = st.selectbox("line", ["ทุกสาย"]+list(SRT_LINES.keys()), label_visibility="collapsed")
 
-    st.markdown("<div style='color:#38bdf8;font-size:0.74rem;font-weight:700;letter-spacing:0.6px;margin:12px 0 5px;'>📅 วันพยากรณ์</div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:#2563eb;font-size:0.74rem;font-weight:700;letter-spacing:0.6px;margin:12px 0 5px;'>📅 วันพยากรณ์</div>", unsafe_allow_html=True)
     day_mode = st.radio("เลือกแบบ", ["ด่วน","ปฏิทิน"], horizontal=True, label_visibility="collapsed")
     HORIZONS = ["วันนี้","พรุ่งนี้","มะรืน","+3 วัน","+4 วัน","+5 วัน","+6 วัน"]
     if day_mode == "ด่วน":
@@ -629,7 +652,7 @@ with st.sidebar:
         day_idx = max(0, min(6, (picked - _min).days))
         sel_day = f"{picked.day} {TH_MONTHS[picked.month]} {picked.year+543}"
 
-    st.markdown("<div style='color:#38bdf8;font-size:0.74rem;font-weight:700;letter-spacing:0.6px;margin:12px 0 5px;'>🔴 Real-time</div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:#2563eb;font-size:0.74rem;font-weight:700;letter-spacing:0.6px;margin:12px 0 5px;'>🔴 Real-time</div>", unsafe_allow_html=True)
     auto = st.toggle("เชื่อมข้อมูลอัตโนมัติ", value=False)
     refresh_sec = 0
     if auto:
@@ -640,15 +663,15 @@ with st.sidebar:
         st.cache_data.clear(); st.rerun()
 
     st.markdown(f"""
-    <div style='color:#5f8199;font-size:0.74rem;margin-top:12px;line-height:1.7;'>
+    <div style='color:#90a2bb;font-size:0.74rem;margin-top:12px;line-height:1.7;'>
         🕐 ดึงข้อมูลล่าสุด<br>
-        <span style='color:#38bdf8;font-weight:700;font-size:0.84rem;'>{th_datetime(NOW_TH)}</span>
+        <span style='color:#2563eb;font-weight:700;font-size:0.84rem;'>{th_datetime(NOW_TH)}</span>
         {"<br><span style='color:#10b981;'>🔴 auto-refresh เปิด</span>" if auto else ""}
     </div>""", unsafe_allow_html=True)
 
-    st.markdown("<hr style='border-color:#1c3247;margin:14px 0;'>", unsafe_allow_html=True)
+    st.markdown("<hr style='border-color:#e3eaf2;margin:14px 0;'>", unsafe_allow_html=True)
     for ln, ld in SRT_LINES.items():
-        st.markdown(f"<div style='display:flex;align-items:center;gap:8px;margin:3px 0;'><div style='width:24px;height:3px;background:{ld['color']};border-radius:2px;'></div><span style='color:#5f8199;font-size:0.72rem;'>{ld['short']} · {ln}</span></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='display:flex;align-items:center;gap:8px;margin:3px 0;'><div style='width:24px;height:3px;background:{ld['color']};border-radius:2px;'></div><span style='color:#90a2bb;font-size:0.72rem;'>{ld['short']} · {ln}</span></div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════
 #  LOAD DATA
@@ -730,16 +753,16 @@ st.markdown(f"""
         <div>
             <h1 class='cmd-title'>🚆 ปริมาณน้ำฝนและสภาพอากาศ</h1>
             <div class='cmd-sub'>ศูนย์ความปลอดภัย ฝ่ายการช่างโยธา · การรถไฟแห่งประเทศไทย</div>
-            <div style='color:#5f8199;font-size:0.74rem;margin-top:3px;'>
+            <div style='color:#90a2bb;font-size:0.74rem;margin-top:3px;'>
                 <span style='background:rgba(212,175,55,0.12);border:1px solid rgba(212,175,55,0.35);
-                color:#d4af37;padding:2px 9px;border-radius:8px;font-weight:600;'>Ver. ทดลอง</span>
+                color:#c79a2e;padding:2px 9px;border-radius:8px;font-weight:600;'>Ver. ทดลอง</span>
                 <span style='margin-left:8px;'>พัฒนาโดย วิศวกรกำกับการกองทางถาวร</span>
             </div>
         </div>
         <div style='text-align:right;'>
             {_live}
-            <div style='color:#9fbcd0;font-size:0.78rem;margin-top:6px;'>📅 {th_datetime(NOW_TH)}</div>
-            <div style='color:#5f8199;font-size:0.74rem;'>พยากรณ์: <b style='color:#38bdf8;'>{sel_day}</b> · {sel_line}</div>
+            <div style='color:#5a6e88;font-size:0.78rem;margin-top:6px;'>📅 {th_datetime(NOW_TH)}</div>
+            <div style='color:#90a2bb;font-size:0.74rem;'>พยากรณ์: <b style='color:#2563eb;'>{sel_day}</b> · {sel_line}</div>
         </div>
     </div>
 </div>""", unsafe_allow_html=True)
@@ -842,10 +865,10 @@ with tab_dash:
             st.markdown(f"""
             <div style='margin:9px 0;'>
                 <div style='display:flex;justify-content:space-between;margin-bottom:4px;'>
-                    <span style='color:#9fbcd0;font-size:0.84rem;'>{lab}</span>
-                    <span style='color:#fff;font-weight:700;font-family:Kanit;'>{cnt} <span style='color:#5f8199;font-size:0.78rem;'>({pct:.0f}%)</span></span>
+                    <span style='color:#5a6e88;font-size:0.84rem;'>{lab}</span>
+                    <span style='color:#1a2b42;font-weight:700;font-family:Kanit;'>{cnt} <span style='color:#90a2bb;font-size:0.78rem;'>({pct:.0f}%)</span></span>
                 </div>
-                <div style='background:rgba(255,255,255,0.05);border-radius:8px;height:12px;overflow:hidden;'>
+                <div style='background:#eef3f9;border-radius:8px;height:12px;overflow:hidden;'>
                     <div style='width:{pct:.1f}%;height:100%;background:{col};border-radius:8px;box-shadow:0 0 10px {col}66;'></div>
                 </div>
             </div>""", unsafe_allow_html=True)
@@ -857,12 +880,12 @@ with tab_dash:
         elif n_ok>0: ov_c,ov_t,ov_d = "#10b981","✅ ปลอดภัย","เดินรถได้ตามปกติทุกสาย"
         else: ov_c,ov_t,ov_d = "#5f8199","— ไม่มีข้อมูล","รอเชื่อมต่อข้อมูล"
         st.markdown(f"""
-        <div style='margin-top:14px;background:rgba(0,0,0,0.25);border:1px solid {ov_c};border-radius:12px;padding:14px 18px;'>
+        <div style='margin-top:14px;background:#f3f7fc;border:1px solid {ov_c};border-radius:12px;padding:14px 18px;'>
             <div style='display:flex;justify-content:space-between;align-items:center;'>
-                <div><div style='color:#5f8199;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.6px;'>สถานะการเดินรถ (ด้านสภาพอากาศ)</div>
+                <div><div style='color:#90a2bb;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.6px;'>สถานะการเดินรถ (ด้านสภาพอากาศ)</div>
                 <div style='font-family:Kanit;color:{ov_c};font-size:1.4rem;font-weight:700;'>{ov_t}</div></div>
             </div>
-            <div style='color:#9fbcd0;font-size:0.84rem;margin-top:4px;'>💡 {ov_d}</div>
+            <div style='color:#5a6e88;font-size:0.84rem;margin-top:4px;'>💡 {ov_d}</div>
         </div></div>""", unsafe_allow_html=True)
 
     # — Top risk stations —
@@ -871,7 +894,7 @@ with tab_dash:
         top = sorted([s for s in station_data if s["rain"] is not None],
                      key=lambda x:x["rain"], reverse=True)[:6]
         if not top:
-            st.markdown("<p style='color:#5f8199;font-size:0.84rem;'>ยังไม่มีข้อมูลปริมาณฝน</p>", unsafe_allow_html=True)
+            st.markdown("<p style='color:#90a2bb;font-size:0.84rem;'>ยังไม่มีข้อมูลปริมาณฝน</p>", unsafe_allow_html=True)
         else:
             for i, s in enumerate(top, 1):
                 lv,lab,em,hx,bc = rain_risk(s["rain"])
@@ -883,7 +906,7 @@ with tab_dash:
                         <div class='risk-meta'>{s['province']} · {s['line']} · กม.{s.get('km',0)}</div>
                     </div>
                     <div style='text-align:right;'>
-                        <div class='risk-num' style='color:{hx};'>{s['rain']:.0f}<span style='font-size:0.7rem;color:#5f8199;'> มม.</span></div>
+                        <div class='risk-num' style='color:{hx};'>{s['rain']:.0f}<span style='font-size:0.7rem;color:#90a2bb;'> มม.</span></div>
                         <span class='bdg {bc}'>{lab}</span>
                     </div>
                 </div>""", unsafe_allow_html=True)
@@ -911,12 +934,12 @@ with tab_dash:
             <div class='rain-name'>{st_['icon']} {L}</div>
             <div class='rain-track'>
                 <div class='rain-fill' style='width:{w:.1f}%;background:linear-gradient(90deg,{hx}99,{hx});'>
-                    <span style='font-size:0.7rem;color:#fff;font-weight:700;'>{("เฉลี่ย "+format(av,'.0f')) if av else ""}</span>
+                    <span style='font-size:0.7rem;color:#ffffff;font-weight:700;'>{("เฉลี่ย "+format(av,'.0f')) if av else ""}</span>
                 </div>
             </div>
             <div class='rain-val' style='color:{hx};'>{mx:.0f}</div>
         </div>""", unsafe_allow_html=True)
-    st.markdown("<div style='color:#5f8199;font-size:0.74rem;margin-top:8px;'>แถบแสดงปริมาณฝนสูงสุดของแต่ละสาย (มม.) · ตัวเลขในแถบคือค่าเฉลี่ย</div></div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:#90a2bb;font-size:0.74rem;margin-top:8px;'>แถบแสดงปริมาณฝนสูงสุดของแต่ละสาย (มม.) · ตัวเลขในแถบคือค่าเฉลี่ย</div></div>", unsafe_allow_html=True)
 
 # ╔═══════════════════════════════════════════════════════════╗
 # ║  TAB: RAINFALL FOCUS                                      ║
@@ -937,16 +960,16 @@ with tab_rain:
                 w = (rv/maxr*100) if rv else 0
                 rain_disp = f"{rv:.1f}" if rv is not None else "—"
                 st.markdown(f"""
-                <div style='background:#0e1a29;border:1px solid #1c3247;border-radius:10px;padding:10px 14px;margin:5px 0;'>
+                <div style='background:#f7fafd;border:1px solid #e3eaf2;border-radius:10px;padding:10px 14px;margin:5px 0;'>
                     <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;'>
-                        <span style='color:#e8f1f8;font-size:0.86rem;font-weight:600;'>{em} {s['name']}</span>
-                        <span style='font-family:Kanit;font-weight:700;color:{hx};font-size:1rem;'>{rain_disp}<span style='font-size:0.7rem;color:#5f8199;'> มม.</span></span>
+                        <span style='color:#1a2b42;font-size:0.86rem;font-weight:600;'>{em} {s['name']}</span>
+                        <span style='font-family:Kanit;font-weight:700;color:{hx};font-size:1rem;'>{rain_disp}<span style='font-size:0.7rem;color:#90a2bb;'> มม.</span></span>
                     </div>
-                    <div style='background:rgba(255,255,255,0.05);border-radius:6px;height:8px;overflow:hidden;'>
+                    <div style='background:#eef3f9;border-radius:6px;height:8px;overflow:hidden;'>
                         <div style='width:{w:.1f}%;height:100%;background:{hx};border-radius:6px;'></div>
                     </div>
                     <div style='display:flex;justify-content:space-between;margin-top:5px;'>
-                        <span style='color:#5f8199;font-size:0.72rem;'>{s['line_short']} · {s['province']}</span>
+                        <span style='color:#90a2bb;font-size:0.72rem;'>{s['line_short']} · {s['province']}</span>
                         <span class='bdg {bc}' style='font-size:0.66rem;'>{lab}</span>
                     </div>
                 </div>""", unsafe_allow_html=True)
@@ -962,11 +985,11 @@ with tab_rain:
     ]
     for em,lab,rng,hx,act in crit_rows:
         st.markdown(f"""
-        <div style='display:grid;grid-template-columns:40px 150px 130px 1fr;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid rgba(28,50,71,0.4);'>
+        <div style='display:grid;grid-template-columns:40px 150px 130px 1fr;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #e3eaf2;'>
             <span style='font-size:1.3rem;'>{em}</span>
             <span style='color:{hx};font-weight:700;font-size:0.86rem;'>{lab}</span>
-            <span style='color:#9fbcd0;font-size:0.82rem;'>{rng}</span>
-            <span style='color:#9fbcd0;font-size:0.82rem;'>💡 {act}</span>
+            <span style='color:#5a6e88;font-size:0.82rem;'>{rng}</span>
+            <span style='color:#5a6e88;font-size:0.82rem;'>💡 {act}</span>
         </div>""", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -979,7 +1002,7 @@ with tab_map:
         import folium
         from streamlit_folium import st_folium
         m = folium.Map(location=[13.5,101.5], zoom_start=6, tiles=None)
-        folium.TileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        folium.TileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
                          attr="© CARTO", name="Dark", max_zoom=19).add_to(m)
         for ln, ld in SRT_LINES.items():
             if sel_line!="ทุกสาย" and ln!=sel_line: continue
@@ -1040,13 +1063,13 @@ with tab_7day:
             mxd = f"{ds['max']:.0f}" if ds["max"] is not None else "—"
             with dcols[di]:
                 st.markdown(f"""
-                <div style='background:#0e1a29;border:1px solid #1c3247;border-top:3px solid {hx};
+                <div style='background:#f7fafd;border:1px solid #e3eaf2;border-top:3px solid {hx};
                     border-radius:12px;padding:12px 6px;text-align:center;'>
-                    <div style='color:#5f8199;font-size:0.68rem;'>{labels7[di]}</div>
-                    <div style='color:#9fbcd0;font-size:0.66rem;'>{d.day} {TH_MONTHS[d.month]}</div>
+                    <div style='color:#90a2bb;font-size:0.68rem;'>{labels7[di]}</div>
+                    <div style='color:#5a6e88;font-size:0.66rem;'>{d.day} {TH_MONTHS[d.month]}</div>
                     <div style='font-size:1.7rem;margin:5px 0;'>{em}</div>
                     <div style='font-family:Kanit;color:{hx};font-weight:700;font-size:1.15rem;'>{mxd}</div>
-                    <div style='color:#5f8199;font-size:0.64rem;'>มม.สูงสุด</div>
+                    <div style='color:#90a2bb;font-size:0.64rem;'>มม.สูงสุด</div>
                     <div style='margin-top:5px;font-size:0.66rem;color:{"#ef4444" if ds["n_heavy"] else "#5f8199"};'>
                         {("⚠️ "+str(ds["n_heavy"])+" สถานี") if ds["n_heavy"] else "ปกติ"}
                     </div>
@@ -1059,10 +1082,10 @@ with tab_7day:
         st.markdown("<div class='panel'><div class='panel-h'>🌡️ ตารางความเสี่ยงรายสถานี × 7 วัน (ปริมาณฝน มม.)</div>", unsafe_allow_html=True)
         # header
         hdr = "<div style='display:grid;grid-template-columns:170px repeat(7,1fr);gap:4px;margin-bottom:6px;'>"
-        hdr += "<div style='color:#5f8199;font-size:0.72rem;'>สถานี \\ วัน</div>"
+        hdr += "<div style='color:#90a2bb;font-size:0.72rem;'>สถานี \\ วัน</div>"
         for di in range(7):
             d = NOW_TH + timedelta(days=di)
-            hdr += f"<div style='text-align:center;color:#5f8199;font-size:0.68rem;'>{labels7[di]}<br>{d.day}/{d.month}</div>"
+            hdr += f"<div style='text-align:center;color:#90a2bb;font-size:0.68rem;'>{labels7[di]}<br>{d.day}/{d.month}</div>"
         hdr += "</div>"
         st.markdown(hdr, unsafe_allow_html=True)
         # rows — only stations that have a risk day, else show top 15 by peak
@@ -1071,17 +1094,17 @@ with tab_7day:
         for s in ranked_stn[:18]:
             ser = s.get("series", [])
             row = f"<div style='display:grid;grid-template-columns:170px repeat(7,1fr);gap:4px;margin:2px 0;align-items:center;'>"
-            row += f"<div style='color:#e8f1f8;font-size:0.76rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>{s['line_icon']} {s['name']}</div>"
+            row += f"<div style='color:#1a2b42;font-size:0.76rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>{s['line_icon']} {s['name']}</div>"
             for di in range(7):
                 if di < len(ser) and ser[di].get("rain") is not None:
                     r = ser[di]["rain"]; hx = rain_hex(r)
                     txt = f"{r:.0f}"
-                    row += f"<div style='background:{hx};color:#fff;text-align:center;border-radius:5px;padding:5px 0;font-size:0.72rem;font-weight:600;'>{txt}</div>"
+                    row += f"<div style='background:{hx};color:#ffffff;text-align:center;border-radius:5px;padding:5px 0;font-size:0.72rem;font-weight:700;'>{txt}</div>"
                 else:
-                    row += "<div style='background:rgba(255,255,255,0.04);text-align:center;border-radius:5px;padding:5px 0;color:#3a5570;font-size:0.72rem;'>—</div>"
+                    row += "<div style='background:#eef3f9;text-align:center;border-radius:5px;padding:5px 0;color:#90a2bb;font-size:0.72rem;'>—</div>"
             row += "</div>"
             st.markdown(row, unsafe_allow_html=True)
-        st.markdown("<div style='color:#5f8199;font-size:0.72rem;margin-top:8px;'>🟢 0-10 · 🔵 10-35 · 🟠 35-90 · 🔴 >90 มม./วัน · แสดง 18 สถานีเสี่ยงสูงสุด</div></div>", unsafe_allow_html=True)
+        st.markdown("<div style='color:#90a2bb;font-size:0.72rem;margin-top:8px;'>🟢 0-10 · 🔵 10-35 · 🟠 35-90 · 🔴 >90 มม./วัน · แสดง 18 สถานีเสี่ยงสูงสุด</div></div>", unsafe_allow_html=True)
 
 # ╔═══════════════════════════════════════════════════════════╗
 # ║  TAB: PER LINE                                            ║
@@ -1152,7 +1175,7 @@ with tab_quake:
             import folium
             from streamlit_folium import st_folium
             qm = folium.Map(location=[15.0,101.0], zoom_start=5, tiles=None)
-            folium.TileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+            folium.TileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
                              attr="© CARTO", max_zoom=19).add_to(qm)
             # draw rail lines faint for context
             for ln, ld in SRT_LINES.items():
@@ -1177,22 +1200,22 @@ with tab_quake:
     with clist:
         st.markdown("<div class='panel'><div class='panel-h'>📋 เหตุการณ์ล่าสุด</div>", unsafe_allow_html=True)
         if not earthquakes:
-            st.markdown(f"<p style='color:#5f8199;font-size:0.84rem;'>ไม่พบเหตุการณ์ หรือเชื่อมต่อ USGS ไม่ได้ ({eq_err})</p>", unsafe_allow_html=True)
+            st.markdown(f"<p style='color:#90a2bb;font-size:0.84rem;'>ไม่พบเหตุการณ์ หรือเชื่อมต่อ USGS ไม่ได้ ({eq_err})</p>", unsafe_allow_html=True)
         else:
             st.markdown("<div style='max-height:430px;overflow-y:auto;'>", unsafe_allow_html=True)
             for e in earthquakes[:25]:
                 mag = e["mag"] or 0
                 col = "#ef4444" if mag>=5 else "#f59e0b" if mag>=4 else "#fbbf24" if mag>=3 else "#94a3b8"
                 st.markdown(f"""
-                <div style='display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid rgba(28,50,71,0.5);'>
+                <div style='display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #e3eaf2;'>
                     <div style='min-width:44px;height:44px;border-radius:10px;background:{col}22;border:1px solid {col};
                         display:flex;align-items:center;justify-content:center;flex-direction:column;'>
                         <span style='font-family:Kanit;font-weight:700;color:{col};font-size:1.05rem;line-height:1;'>{mag:.1f}</span>
                         <span style='color:{col};font-size:0.56rem;'>MAG</span>
                     </div>
                     <div style='flex:1;min-width:0;'>
-                        <div style='color:#e8f1f8;font-size:0.8rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>{e['place']}</div>
-                        <div style='color:#5f8199;font-size:0.72rem;'>🕐 {e['time']} · ลึก {e['depth']:.0f} กม.</div>
+                        <div style='color:#1a2b42;font-size:0.8rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>{e['place']}</div>
+                        <div style='color:#90a2bb;font-size:0.72rem;'>🕐 {e['time']} · ลึก {e['depth']:.0f} กม.</div>
                     </div>
                 </div>""", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
@@ -1224,13 +1247,13 @@ with tab_detail:
                     temp_d = f"{f['tc_max']:.0f}°" if f["tc_max"] is not None else "—"
                     with day_cols[i]:
                         st.markdown(f"""
-                        <div style='background:#0e1a29;border:1px solid #1c3247;border-top:3px solid {hx};
+                        <div style='background:#f7fafd;border:1px solid #e3eaf2;border-top:3px solid {hx};
                             border-radius:10px;padding:10px 6px;text-align:center;'>
-                            <div style='color:#5f8199;font-size:0.7rem;'>{tdate}</div>
+                            <div style='color:#90a2bb;font-size:0.7rem;'>{tdate}</div>
                             <div style='font-size:1.6rem;margin:4px 0;'>{cond_emoji(f['cond'])}</div>
                             <div style='font-family:Kanit;color:{hx};font-weight:700;font-size:1.1rem;'>{rain_d}</div>
-                            <div style='color:#5f8199;font-size:0.66rem;'>มม.</div>
-                            <div style='color:#9fbcd0;font-size:0.74rem;margin-top:3px;'>🌡️ {temp_d}</div>
+                            <div style='color:#90a2bb;font-size:0.66rem;'>มม.</div>
+                            <div style='color:#5a6e88;font-size:0.74rem;margin-top:3px;'>🌡️ {temp_d}</div>
                         </div>""", unsafe_allow_html=True)
             else:
                 st.info("ไม่มีข้อมูลแนวโน้มรายวัน")
@@ -1263,11 +1286,11 @@ with tab_detail:
 # ══════════════════════════════════════════════════════════════
 #  FOOTER + AUTO-REFRESH
 # ══════════════════════════════════════════════════════════════
-st.markdown("<hr style='border-color:#1c3247;margin:20px 0 10px;'>", unsafe_allow_html=True)
+st.markdown("<hr style='border-color:#e3eaf2;margin:20px 0 10px;'>", unsafe_allow_html=True)
 st.markdown(f"""
-<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;color:#3a5570;font-size:0.74rem;'>
-    <span>🚆 ปริมาณน้ำฝนและสภาพอากาศ · ศูนย์ความปลอดภัย ฝ่ายการช่างโยธา · รฟท. · <b style='color:#d4af37;'>Ver. ทดลอง</b></span>
-    <span>ข้อมูล: <a href='https://data.tmd.go.th/nwpapi/doc/main/getting_start.html' target='_blank' style='color:#38bdf8;'>TMD NWP API</a> · แผ่นดินไหว: <a href='https://earthquake.usgs.gov' target='_blank' style='color:#38bdf8;'>USGS</a></span>
+<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;color:#90a2bb;font-size:0.74rem;'>
+    <span>🚆 ปริมาณน้ำฝนและสภาพอากาศ · ศูนย์ความปลอดภัย ฝ่ายการช่างโยธา · รฟท. · <b style='color:#c79a2e;'>Ver. ทดลอง</b></span>
+    <span>ข้อมูล: <a href='https://data.tmd.go.th/nwpapi/doc/main/getting_start.html' target='_blank' style='color:#2563eb;'>TMD NWP API</a> · แผ่นดินไหว: <a href='https://earthquake.usgs.gov' target='_blank' style='color:#2563eb;'>USGS</a></span>
     <span>พัฒนาโดย วิศวกรกำกับการกองทางถาวร · อัพเดต {th_datetime(NOW_TH)}</span>
 </div>""", unsafe_allow_html=True)
 
