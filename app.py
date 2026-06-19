@@ -1,7 +1,7 @@
 """
 🚆 SRT Weather Command Center
-ศูนย์เฝ้าระวังสภาพอากาศและปริมาณน้ำฝน · ศูนย์ความปลอดภัย ฝ่ายการช่างโยธา
-สำหรับผู้บริหารและนักบำรุงทาง · ข้อมูลจากกรมอุตุนิยมวิทยา (TMD NWP API v1)
+ศูนย์เฝ้าระวังสภาพอากาศและปริมาณน้ำฝน · โครงข่ายรถไฟแห่งประเทศไทย
+สำหรับผู้บริหารงานเดินรถ · ข้อมูลจากกรมอุตุนิยมวิทยา (TMD NWP API v1)
 """
 
 import streamlit as st
@@ -205,6 +205,113 @@ div[data-testid="stExpander"] summary { color:var(--ink) !important; font-weight
 .sec-label { font-family:'Kanit',sans-serif; color:var(--ink); font-size:1.05rem; font-weight:600;
     margin:6px 0 12px; display:flex; align-items:center; gap:10px; }
 .sec-label::before { content:''; width:4px; height:18px; background:linear-gradient(180deg,#2563eb,#0ea5e9); border-radius:2px; }
+
+/* ════════════ GRAPHIC FLOURISHES & ANIMATIONS ════════════ */
+
+/* entrance fade-up for major blocks */
+@keyframes fadeUp { from{opacity:0; transform:translateY(14px);} to{opacity:1; transform:translateY(0);} }
+.cmd-header, .alert-banner, .kpi, .panel { animation: fadeUp .5s cubic-bezier(.2,.7,.3,1) both; }
+.kpi:nth-child(1){animation-delay:.03s} .kpi:nth-child(2){animation-delay:.08s}
+.kpi:nth-child(3){animation-delay:.13s} .kpi:nth-child(4){animation-delay:.18s}
+.kpi:nth-child(5){animation-delay:.23s} .kpi:nth-child(6){animation-delay:.28s}
+
+/* animated sheen across the header */
+.cmd-header { position:relative; }
+.cmd-header::after {
+    content:''; position:absolute; top:0; left:-60%; width:50%; height:100%;
+    background:linear-gradient(100deg, transparent, rgba(37,99,235,0.10), transparent);
+    transform:skewX(-18deg); animation:sheen 6s ease-in-out infinite;
+}
+@keyframes sheen { 0%{left:-60%} 55%{left:140%} 100%{left:140%} }
+
+/* gradient animated title text */
+.cmd-title {
+    background:linear-gradient(90deg,#1a2b42,#2563eb,#0ea5e9,#1a2b42);
+    background-size:300% 100%;
+    -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent;
+    animation:titleflow 8s ease infinite;
+}
+@keyframes titleflow { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+
+/* KPI glow ring + shimmer top bar */
+.kpi::after { background:linear-gradient(90deg,var(--c,#2563eb),transparent,var(--c,#2563eb)); background-size:200% 100%; animation:barflow 3s linear infinite; }
+@keyframes barflow { 0%{background-position:0% 0} 100%{background-position:200% 0} }
+.kpi::before {
+    content:''; position:absolute; inset:0; border-radius:16px; padding:1px;
+    background:linear-gradient(135deg, var(--c,#2563eb)33, transparent 40%);
+    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor; mask-composite:exclude; opacity:0; transition:opacity .2s;
+}
+.kpi:hover::before { opacity:1; }
+.kpi:hover { transform:translateY(-4px) scale(1.012); }
+.kpi-ico { display:inline-block; transition:transform .2s; }
+.kpi:hover .kpi-ico { transform:scale(1.18) rotate(-6deg); }
+.kpi-val { background:linear-gradient(120deg,var(--ink),var(--c,#2563eb)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+
+/* alert banner soft breathing glow */
+.ab-crit { animation: fadeUp .5s both, glowcrit 2.2s ease-in-out infinite; }
+@keyframes glowcrit { 0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0.0), var(--shadow)} 50%{box-shadow:0 0 22px 2px rgba(220,38,38,0.18), var(--shadow)} }
+.ab-icon { animation: bob 2.6s ease-in-out infinite; }
+@keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+
+/* panel hover lift */
+.panel { transition:transform .15s, box-shadow .15s; }
+.panel:hover { transform:translateY(-2px); box-shadow:var(--shadow-lg); }
+.panel-h::after { content:''; flex:1; height:1px; margin-left:6px;
+    background:linear-gradient(90deg,var(--line),transparent); }
+
+/* buttons: gradient shift + ripple shine */
+.stButton > button{ position:relative; overflow:hidden;
+    background:linear-gradient(135deg,#2563eb,#0ea5e9,#2563eb) !important; background-size:200% 100% !important;
+    transition:background-position .4s, box-shadow .2s, transform .12s !important; }
+.stButton > button:hover{ background-position:100% 0 !important; transform:translateY(-2px) !important;
+    box-shadow:0 6px 22px rgba(37,99,235,0.40) !important; }
+.stButton > button:active{ transform:translateY(0) scale(.98) !important; }
+.stButton > button::after{ content:''; position:absolute; top:0; left:-120%; width:60%; height:100%;
+    background:linear-gradient(100deg,transparent,rgba(255,255,255,0.45),transparent); transform:skewX(-20deg); }
+.stButton > button:hover::after{ animation:btnshine .7s ease; }
+@keyframes btnshine { from{left:-120%} to{left:140%} }
+
+/* tabs: animated underline + lift */
+.stTabs [data-baseweb="tab"]{ transition:color .2s, background .2s, transform .12s; }
+.stTabs [data-baseweb="tab"]:hover{ transform:translateY(-1px); }
+.stTabs [aria-selected="true"]{ box-shadow:0 4px 14px rgba(37,99,235,0.32); }
+
+/* rain-fill animated stripes */
+.rain-fill{ position:relative; overflow:hidden; }
+.rain-fill::after{ content:''; position:absolute; inset:0;
+    background-image:linear-gradient(45deg, rgba(255,255,255,0.18) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.18) 50%, rgba(255,255,255,0.18) 75%, transparent 75%);
+    background-size:18px 18px; animation:stripes 1s linear infinite; opacity:.6; }
+@keyframes stripes { from{background-position:0 0} to{background-position:18px 0} }
+
+/* risk item hover slide */
+.risk-item{ transition:background .15s, padding-left .15s; border-radius:8px; }
+.risk-item:hover{ background:#f3f7fc; padding-left:8px; }
+
+/* badge pop */
+.bdg{ transition:transform .12s; display:inline-block; }
+.bdg:hover{ transform:scale(1.08); }
+
+/* live pill glow */
+.cmd-live{ box-shadow:0 0 0 0 rgba(5,150,105,0.0); animation:livepulse 2.4s ease-in-out infinite; }
+@keyframes livepulse { 0%,100%{box-shadow:0 0 0 0 rgba(5,150,105,0)} 50%{box-shadow:0 0 14px 1px rgba(5,150,105,0.25)} }
+
+/* metric tiles hover */
+div[data-testid="stMetric"]{ transition:transform .14s, box-shadow .14s; }
+div[data-testid="stMetric"]:hover{ transform:translateY(-2px); box-shadow:var(--shadow-lg); }
+
+/* dataframe rounded glow on hover */
+.stDataFrame:hover{ box-shadow:var(--shadow-lg); transition:box-shadow .2s; }
+
+/* scrollbar gradient */
+::-webkit-scrollbar-thumb{ background:linear-gradient(180deg,#9bb6d6,#c2d1e3); }
+
+/* sidebar section headers get a tiny accent dot */
+[data-testid="stSidebar"] hr{ border:none; height:1px; background:linear-gradient(90deg,var(--line),transparent) !important; }
+
+/* floating weather emoji shimmer for KPI icons handled inline */
+@keyframes floaty { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-3px)} }
 </style>
 """, unsafe_allow_html=True)
 
@@ -749,7 +856,11 @@ _live = ('<span class="cmd-live"><span class="pulse"></span>LIVE · REAL-TIME</s
          if api_ok else '<span class="cmd-live" style="background:rgba(239,68,68,0.15);border-color:rgba(239,68,68,0.4);color:#f87171;">● OFFLINE</span>')
 st.markdown(f"""
 <div class='cmd-header'>
-    <div style='display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;'>
+    <div style='position:absolute;right:-40px;top:-40px;width:180px;height:180px;border-radius:50%;
+        background:radial-gradient(circle,rgba(14,165,233,0.18),transparent 70%);pointer-events:none;animation:floaty 6s ease-in-out infinite;'></div>
+    <div style='position:absolute;right:90px;bottom:-50px;width:130px;height:130px;border-radius:50%;
+        background:radial-gradient(circle,rgba(37,99,235,0.14),transparent 70%);pointer-events:none;animation:floaty 7.5s ease-in-out infinite reverse;'></div>
+    <div style='display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;position:relative;z-index:2;'>
         <div>
             <h1 class='cmd-title'>🚆 ปริมาณน้ำฝนและสภาพอากาศ</h1>
             <div class='cmd-sub'>ศูนย์ความปลอดภัย ฝ่ายการช่างโยธา · การรถไฟแห่งประเทศไทย</div>
@@ -814,14 +925,30 @@ if eq_felt:
 # ══════════════════════════════════════════════════════════════
 #  KPI ROW
 # ══════════════════════════════════════════════════════════════
+_kpi_seq = [0]
 def kpi(col, ico, tag, val, unit, lab, foot, cls):
+    _kpi_seq[0] += 1
+    uid = f"kpi{_kpi_seq[0]}"
+    # detect numeric for count-up
+    is_num = False
+    try:
+        fval = float(str(val).replace(",",""))
+        is_num = str(val) not in ("—","")
+    except Exception:
+        fval = 0.0
+    decimals = 1 if ("." in str(val)) else 0
+    valspan = f"<span id='{uid}'>{val}</span>" if is_num else f"{val}"
     col.markdown(f"""
     <div class='kpi {cls}'>
-        <div class='kpi-top'><span class='kpi-ico'>{ico}</span><span class='kpi-tag'>{tag}</span></div>
-        <div class='kpi-val'>{val}<small>{unit}</small></div>
+        <div class='kpi-top'><span class='kpi-ico' style='animation:floaty 3.2s ease-in-out infinite;'>{ico}</span><span class='kpi-tag'>{tag}</span></div>
+        <div class='kpi-val'>{valspan}<small>{unit}</small></div>
         <div class='kpi-lab'>{lab}</div>
         <div class='kpi-foot'>{foot}</div>
-    </div>""", unsafe_allow_html=True)
+    </div>
+    {f'''<script>(function(){{var el=document.getElementById("{uid}");if(!el)return;var t={fval},d={decimals},dur=900,s=performance.now();
+    function tick(n){{var p=Math.min((n-s)/dur,1);var e=1-Math.pow(1-p,3);el.textContent=(t*e).toFixed(d);if(p<1)requestAnimationFrame(tick);}}
+    requestAnimationFrame(tick);}})();</script>''' if is_num else ''}
+    """, unsafe_allow_html=True)
 
 k = st.columns(6)
 kpi(k[0],"🌧️","สูงสุด", f"{max_rain:.0f}" if max_rain is not None else "—","มม.",
