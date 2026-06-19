@@ -696,8 +696,221 @@ def assess_7day(series):
     return (peak, peak_label, peak_rain, n_risk, advice)
 
 # ══════════════════════════════════════════════════════════════
-#  SIDEBAR
+#  PDF REPORT BUILDER  (reportlab + Thai font)
 # ══════════════════════════════════════════════════════════════
+@st.cache_resource(show_spinner=False)
+def _register_thai_font():
+    """ลงทะเบียนฟอนต์ไทย Sarabun (ดาวน์โหลดครั้งเดียว, cache).
+       คืนชื่อฟอนต์ (regular, bold) ถ้าสำเร็จ ไม่งั้น Helvetica."""
+    try:
+        import os
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        font_dir = os.path.join(os.path.expanduser("~"), ".srt_fonts")
+        os.makedirs(font_dir, exist_ok=True)
+        reg = os.path.join(font_dir, "Sarabun-Regular.ttf")
+        bld = os.path.join(font_dir, "Sarabun-Bold.ttf")
+        urls = {
+            reg: "https://github.com/google/fonts/raw/main/ofl/sarabun/Sarabun-Regular.ttf",
+            bld: "https://github.com/google/fonts/raw/main/ofl/sarabun/Sarabun-Bold.ttf",
+        }
+        for path, url in urls.items():
+            if not os.path.exists(path):
+                r = requests.get(url, timeout=15)
+                if r.status_code == 200:
+                    with open(path, "wb") as f:
+                        f.write(r.content)
+        if os.path.exists(reg) and os.path.exists(bld):
+            pdfmetrics.registerFont(TTFont("Sarabun", reg))
+            pdfmetrics.registerFont(TTFont("Sarabun-Bold", bld))
+            return "Sarabun", "Sarabun-Bold"
+    except Exception:
+        pass
+    return "Helvetica", "Helvetica-Bold"
+
+
+def build_executive_pdf(meta, kpis, line_stats, top_risks, day_summary, quakes):
+    """สร้างรายงานสรุปผู้บริหารเป็น PDF (bytes)."""
+    from io import BytesIO
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table,
+                                    TableStyle, HRFlowable)
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
+    FN, FB = _register_thai_font()
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            topMargin=16*mm, bottomMargin=16*mm,
+                            leftMargin=15*mm, rightMargin=15*mm,
+                            title="รายงานสรุปสภาพอากาศ")
+    ss = getSampleStyleSheet()
+    H1 = ParagraphStyle("H1", parent=ss["Title"], fontName=FB, fontSize=18,
+                        textColor=colors.HexColor("#1a2b42"), spaceAfter=2, alignment=TA_LEFT)
+    SUB = ParagraphStyle("SUB", fontName=FN, fontSize=10,
+                         textColor=colors.HexColor("#5a6e88"), spaceAfter=2)
+    H2 = ParagraphStyle("H2", fontName=FB, fontSize=12.5,
+                        textColor=colors.HexColor("#2563eb"), spaceBefore=10, spaceAfter=6)
+    BODY = ParagraphStyle("BODY", fontName=FN, fontSize=9.5,
+                          textColor=colors.HexColor("#1a2b42"), leading=14)
+    SMALL = ParagraphStyle("SMALL", fontName=FN, fontSize=8,
+                           textColor=colors.HexColor("#90a2bb"))
+    story = []
+
+    # Header
+    story.append(Paragraph("รายงานสรุปสภาพอากาศและปริมาณน้ำฝน", H1))
+    story.append(Paragraph("ศูนย์ความปลอดภัย ฝ่ายการช่างโยธา · การรถไฟแห่งประเทศไทย", SUB))
+    story.append(Paragraph(f"ข้อมูล ณ {meta['datetime']} · เส้นทาง: {meta['line']} · พยากรณ์: {meta['day']}", SUB))
+    story.append(Spacer(1, 4))
+    story.append(HRFlowable(width="100%", thickness=1.4, color=colors.HexColor("#2563eb")))
+    story.append(Spacer(1, 8))
+
+    # Status verdict
+    story.append(Paragraph("สถานะภาพรวม (ด้านสภาพอากาศ)", H2))
+    sv = meta["verdict"]
+    sv_tbl = Table([[Paragraph(f"<b>{sv['title']}</b>", ParagraphStyle("v",fontName=FB,fontSize=13,textColor=colors.white)),
+                     Paragraph(sv['detail'], ParagraphStyle("vd",fontName=FN,fontSize=9.5,textColor=colors.white))]],
+                   colWidths=[55*mm, 125*mm])
+    sv_tbl.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,-1),colors.HexColor(sv["color"])),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("LEFTPADDING",(0,0),(-1,-1),10),("RIGHTPADDING",(0,0),(-1,-1),10),
+        ("TOPPADDING",(0,0),(-1,-1),9),("BOTTOMPADDING",(0,0),(-1,-1),9),
+        ("ROUNDEDCORNERS",[6,6,6,6]),
+    ]))
+    story.append(sv_tbl)
+    story.append(Spacer(1, 10))
+
+    # KPI grid (2 rows x 3)
+    story.append(Paragraph("ตัวชี้วัดสำคัญ", H2))
+    kc = []
+    row = []
+    for i, (lab, val, unit, hexc) in enumerate(kpis):
+        cell = Table([[Paragraph(lab, ParagraphStyle("kl",fontName=FN,fontSize=8,textColor=colors.HexColor("#5a6e88")))],
+                      [Paragraph(f"<b>{val}</b> <font size=8>{unit}</font>",
+                                 ParagraphStyle("kv",fontName=FB,fontSize=16,textColor=colors.HexColor(hexc)))]],
+                     colWidths=[57*mm])
+        cell.setStyle(TableStyle([
+            ("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#f7fafd")),
+            ("BOX",(0,0),(-1,-1),0.6,colors.HexColor("#e3eaf2")),
+            ("LINEABOVE",(0,0),(-1,0),2.2,colors.HexColor(hexc)),
+            ("LEFTPADDING",(0,0),(-1,-1),8),("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),6),
+        ]))
+        row.append(cell)
+        if len(row) == 3:
+            kc.append(row); row = []
+    if row: kc.append(row + [""]*(3-len(row)))
+    kpi_tbl = Table(kc, colWidths=[60*mm]*3, hAlign="LEFT")
+    kpi_tbl.setStyle(TableStyle([("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),3),
+                                 ("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),
+                                 ("VALIGN",(0,0),(-1,-1),"TOP")]))
+    story.append(kpi_tbl)
+    story.append(Spacer(1, 8))
+
+    # Per-line rainfall table
+    story.append(Paragraph("ปริมาณน้ำฝนแยกตามสายทาง", H2))
+    ldata = [["สายทาง","ฝนสูงสุด (มม.)","ฝนเฉลี่ย (มม.)","สถานีเสี่ยง"]]
+    for ln, mx, av, heavy in line_stats:
+        ldata.append([ln, f"{mx:.0f}" if mx is not None else "—",
+                      f"{av:.1f}" if av is not None else "—", str(heavy)])
+    lt = Table(ldata, colWidths=[70*mm, 36*mm, 36*mm, 38*mm])
+    lt.setStyle(TableStyle([
+        ("FONTNAME",(0,0),(-1,-1),FN),("FONTSIZE",(0,0),(-1,-1),9),
+        ("FONTNAME",(0,0),(-1,0),FB),
+        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#2563eb")),
+        ("TEXTCOLOR",(0,0),(-1,0),colors.white),
+        ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white, colors.HexColor("#f3f7fc")]),
+        ("GRID",(0,0),(-1,-1),0.4,colors.HexColor("#e3eaf2")),
+        ("ALIGN",(1,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),
+    ]))
+    story.append(lt)
+    story.append(Spacer(1, 8))
+
+    # Top risk stations
+    story.append(Paragraph("สถานีเสี่ยงสูงสุด", H2))
+    if top_risks:
+        tdata = [["อันดับ","สถานี","จังหวัด","สายทาง","ฝน (มม.)","ระดับ"]]
+        for i,(nm,prov,line,rain,lab) in enumerate(top_risks,1):
+            tdata.append([str(i), nm, prov, line, f"{rain:.0f}" if rain is not None else "—", lab])
+        tt = Table(tdata, colWidths=[14*mm,46*mm,32*mm,40*mm,22*mm,26*mm])
+        tt.setStyle(TableStyle([
+            ("FONTNAME",(0,0),(-1,-1),FN),("FONTSIZE",(0,0),(-1,-1),8.5),
+            ("FONTNAME",(0,0),(-1,0),FB),
+            ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#dc2626")),
+            ("TEXTCOLOR",(0,0),(-1,0),colors.white),
+            ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white, colors.HexColor("#fef5f5")]),
+            ("GRID",(0,0),(-1,-1),0.4,colors.HexColor("#e3eaf2")),
+            ("ALIGN",(0,0),(0,-1),"CENTER"),("ALIGN",(4,0),(4,-1),"CENTER"),
+            ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
+        ]))
+        story.append(tt)
+    else:
+        story.append(Paragraph("ไม่มีสถานีที่มีความเสี่ยง", BODY))
+    story.append(Spacer(1, 8))
+
+    # 7-day outlook
+    story.append(Paragraph("แนวโน้มความเสี่ยง 7 วันข้างหน้า (ฝนสูงสุดรวมทั้งเครือข่าย)", H2))
+    if day_summary:
+        ddata = [["วัน"]+[d["label"] for d in day_summary],
+                 ["ฝนสูงสุด (มม.)"]+[f"{d['max']:.0f}" if d["max"] is not None else "—" for d in day_summary],
+                 ["สถานีเสี่ยง"]+[str(d["n_heavy"]) for d in day_summary]]
+        dt = Table(ddata, colWidths=[34*mm]+[20.5*mm]*len(day_summary))
+        cmds = [
+            ("FONTNAME",(0,0),(-1,-1),FN),("FONTSIZE",(0,0),(-1,-1),8),
+            ("FONTNAME",(0,0),(0,-1),FB),("FONTNAME",(0,0),(-1,0),FB),
+            ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0ea5e9")),
+            ("TEXTCOLOR",(0,0),(-1,0),colors.white),
+            ("GRID",(0,0),(-1,-1),0.4,colors.HexColor("#e3eaf2")),
+            ("ALIGN",(1,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
+        ]
+        # color the max-rain cells
+        for ci,d in enumerate(day_summary, start=1):
+            hx = d["hex"]
+            cmds.append(("BACKGROUND",(ci,1),(ci,1),colors.HexColor(hx)))
+            cmds.append(("TEXTCOLOR",(ci,1),(ci,1),colors.white))
+        dt.setStyle(TableStyle(cmds))
+        story.append(dt)
+    story.append(Spacer(1, 8))
+
+    # Earthquakes
+    if quakes:
+        story.append(Paragraph("แผ่นดินไหวในภูมิภาค (7 วันล่าสุด)", H2))
+        qdata = [["ขนาด (M)","ตำแหน่ง","เวลา","ลึก (กม.)"]]
+        for q in quakes[:8]:
+            qdata.append([f"{q['mag']:.1f}" if q["mag"] else "—", q["place"][:48],
+                          q["time"], f"{q['depth']:.0f}" if q["depth"] is not None else "—"])
+        qt = Table(qdata, colWidths=[24*mm, 92*mm, 34*mm, 30*mm])
+        qt.setStyle(TableStyle([
+            ("FONTNAME",(0,0),(-1,-1),FN),("FONTSIZE",(0,0),(-1,-1),8.5),
+            ("FONTNAME",(0,0),(-1,0),FB),
+            ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#e8820c")),
+            ("TEXTCOLOR",(0,0),(-1,0),colors.white),
+            ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white, colors.HexColor("#fffaf2")]),
+            ("GRID",(0,0),(-1,-1),0.4,colors.HexColor("#e3eaf2")),
+            ("ALIGN",(0,0),(0,-1),"CENTER"),("ALIGN",(3,0),(3,-1),"CENTER"),
+            ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
+        ]))
+        story.append(qt)
+        story.append(Spacer(1, 8))
+
+    # Footer
+    story.append(Spacer(1, 6))
+    story.append(HRFlowable(width="100%", thickness=0.6, color=colors.HexColor("#e3eaf2")))
+    story.append(Paragraph(
+        "รายงานนี้จัดทำโดยระบบอัตโนมัติ · ข้อมูลพยากรณ์จากกรมอุตุนิยมวิทยา (TMD NWP API) · "
+        "แผ่นดินไหวจาก USGS · พัฒนาโดย วิศวกรกำกับการกองทางถาวร · Ver. ทดลอง", SMALL))
+
+    doc.build(story)
+    buf.seek(0)
+    return buf.getvalue()
+
+
 with st.sidebar:
     st.markdown("""
     <div style='text-align:center;padding:10px 0 16px;'>
