@@ -778,6 +778,16 @@ else:
             <p>สภาพอากาศเอื้ออำนวยต่อการเดินรถทุกสาย · เชื่อมข้อมูล {n_fetched}/{len(station_data)} สถานี</p></div>
         </div>""", unsafe_allow_html=True)
 
+# Earthquake alert (if significant quake in region)
+if eq_felt:
+    _big = max(eq_felt, key=lambda e: e["mag"] or 0)
+    st.markdown(f"""
+    <div class='alert-banner ab-warn' style='margin-top:-6px;'>
+        <div class='ab-icon'>🌋</div>
+        <div class='ab-text'><h3>ตรวจพบแผ่นดินไหว M{_big['mag']:.1f} ในภูมิภาค</h3>
+        <p>{_big['place']} · {_big['time']} · ลึก {_big['depth']:.0f} กม. — มี {len(eq_felt)} เหตุการณ์ M≥4.5 ใน 7 วัน · ดูรายละเอียดที่แท็บ 🌋 แผ่นดินไหว</p></div>
+    </div>""", unsafe_allow_html=True)
+
 # ══════════════════════════════════════════════════════════════
 #  KPI ROW
 # ══════════════════════════════════════════════════════════════
@@ -1256,9 +1266,9 @@ with tab_detail:
 st.markdown("<hr style='border-color:#1c3247;margin:20px 0 10px;'>", unsafe_allow_html=True)
 st.markdown(f"""
 <div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;color:#3a5570;font-size:0.74rem;'>
-    <span>🚆 SRT Weather Command Center · สำหรับผู้บริหารงานเดินรถ</span>
-    <span>ข้อมูล: <a href='https://data.tmd.go.th/nwpapi/doc/main/getting_start.html' target='_blank' style='color:#38bdf8;'>TMD NWP API v1</a> · โครงข่าย: <a href='https://datagov.mot.go.th' target='_blank' style='color:#38bdf8;'>รฟท.</a></span>
-    <span>อัพเดต {th_datetime(NOW_TH)}</span>
+    <span>🚆 ปริมาณน้ำฝนและสภาพอากาศ · ศูนย์ความปลอดภัย ฝ่ายการช่างโยธา · รฟท. · <b style='color:#d4af37;'>Ver. ทดลอง</b></span>
+    <span>ข้อมูล: <a href='https://data.tmd.go.th/nwpapi/doc/main/getting_start.html' target='_blank' style='color:#38bdf8;'>TMD NWP API</a> · แผ่นดินไหว: <a href='https://earthquake.usgs.gov' target='_blank' style='color:#38bdf8;'>USGS</a></span>
+    <span>พัฒนาโดย วิศวกรกำกับการกองทางถาวร · อัพเดต {th_datetime(NOW_TH)}</span>
 </div>""", unsafe_allow_html=True)
 
 if auto and refresh_sec>0:
