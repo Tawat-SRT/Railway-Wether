@@ -604,7 +604,21 @@ def parse_earthquakes(geojson):
     return out
 
 # ── GISTDA flood data integration ──
-GISTDA_KEY = "nH0aUzEb1BKF3It2xD2j11FeXabtrsmUh7ZZJz7Vcy6980TBbPmecGISZm3h2Jbt"
+_GISTDA_DEFAULT = "nH0aUzEb1BKF3It2xD2j11FeXabtrsmUh7ZZJz7Vcy6980TBbPmecGISZm3h2Jbt"
+def _resolve_gistda_key():
+    """อ่าน GISTDA key จาก secrets/env ถ้ามี ไม่งั้นใช้ค่าฝังในตัว (ทนต่อ secrets ที่ format พัง)."""
+    try:
+        v = str(st.secrets.get("GISTDA_KEY","") or st.secrets.get("gistda_key",""))
+        if v.strip(): return v.strip()
+    except Exception:
+        pass
+    try:
+        v = os.environ.get("GISTDA_KEY","")
+        if v.strip(): return v.strip()
+    except Exception:
+        pass
+    return _GISTDA_DEFAULT
+GISTDA_KEY = _resolve_gistda_key()
 
 def _haversine(lat1, lon1, lat2, lon2):
     """ระยะทางระหว่าง 2 พิกัด (กม.)"""
