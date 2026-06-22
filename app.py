@@ -604,21 +604,36 @@ def parse_earthquakes(geojson):
     return out
 
 # ── GISTDA flood data integration ──
-_GISTDA_DEFAULT = "nH0aUzEb1BKF3It2xD2j11FeXabtrsmUh7ZZJz7Vcy6980TBbPmecGISZm3h2Jbt"
+# แก้ไขใหม่: รองรับ Streamlit Cloud ที่เจอ HTTP 407, ใช้ Proxy/Cache ได้,
+# และไม่ฝัง API Key ไว้ในไฟล์ app.py
+
+def _read_secret_or_env(*names, default=""):
+    """อ่านค่าจาก Streamlit Secrets ก่อน แล้วค่อยอ่านจาก Environment"""
+    for name in names:
+        try:
+            v = st.secrets.get(name, "")
+            if v is not None and str(v).strip():
+                return str(v).strip()
+        except Exception:
+            pass
+        try:
+            v = os.environ.get(name, "")
+            if v is not None and str(v).strip():
+                return str(v).strip()
+        except Exception:
+            pass
+    return default
+
+
 def _resolve_gistda_key():
-    """อ่าน GISTDA key จาก secrets/env ถ้ามี ไม่งั้นใช้ค่าฝังในตัว (ทนต่อ secrets ที่ format พัง)."""
-    try:
-        v = str(st.secrets.get("GISTDA_KEY","") or st.secrets.get("gistda_key",""))
-        if v.strip(): return v.strip()
-    except Exception:
-        pass
-    try:
-        v = os.environ.get("GISTDA_KEY","")
-        if v.strip(): return v.strip()
-    except Exception:
-        pass
-    return _GISTDA_DEFAULT
+    """อ่าน GISTDA API key จาก Secrets/Environment เท่านั้น"""
+    return _read_secret_or_env("GISTDA_KEY", "GISTDA_API_KEY", "gistda_key", default="")
+
+
 GISTDA_KEY = _resolve_gistda_key()
+GISTDA_PROXY_URL = _read_secret_or_env("GISTDA_PROXY_URL", "gistda_proxy_url", default="")
+GISTDA_CACHE_URL = _read_secret_or_env("GISTDA_CACHE_URL", "gistda_cache_url", default="")
+
 
 def _haversine(lat1, lon1, lat2, lon2):
     """ระยะทางระหว่าง 2 พิกัด (กม.)"""
@@ -628,67 +643,185 @@ def _haversine(lat1, lon1, lat2, lon2):
     a = math.sin(dp/2)**2 + math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
     return 2*R*math.asin(math.sqrt(a))
 
-@st.cache_data(ttl=1800, show_spinner=False)
-def fetch_gistda_flood(period="1day", limit=1000):
-    """ดึงพื้นที่น้ำท่วมจาก GISTDA.
-       period: 1day / 3day / 7day · คืน (features_list, error, source).
-       feature = {province, amphoe, tambon, lat, lon, area_rai, date}."""
-    ua = "Mozilla/5.0 (compatible; SRT-WeatherApp/1.0)"
-    # หลาย endpoint (เผื่อบางโดเมนถูก allowlist ของ proxy ฝั่งโฮสต์)
-    endpoints = [
-        f"https://api-gateway.gistda.or.th/api/2.0/resources/features/flood/{period}",
-        f"https://disaster.gistda.or.th/api/2.0/resources/features/flood/{period}",
-    ]
-    key_headers = [
-        {"API-Key": GISTDA_KEY},
-        {"apikey": GISTDA_KEY},
-        {"x-api-key": GISTDA_KEY},
-    ]
-    last_err = ""; proxy_blocked = False
 
-    def _try(url, headers, params):
-        nonlocal last_err, proxy_blocked
-        h = {"accept":"application/json", "User-Agent":ua}; h.update(headers)
-        p = {"limit":limit, "offset":0}; p.update(params)
+def _no_proxy_session():
+    """ปิด proxy ที่อาจถูก inject จาก environment ของ host เพื่อลดโอกาส HTTP 407"""
+    s = requests.Session()
+    s.trust_env = False
+    return s
+
+
+def _safe_json_get(url, headers=None, params=None, timeout=30):
+    """GET JSON พร้อมจัดการ error สำหรับ GISTDA/Proxy/Cache"""
+    headers = headers or {}
+    params = params or {}
+    base_headers = {
+        "accept": "application/json, text/plain, */*",
+        "User-Agent": "SRT-Weather-Command/1.0",
+        "Origin": "https://disaster.gistda.or.th",
+        "Referer": "https://disaster.gistda.or.th/",
+        "Cache-Control": "no-cache",
+    }
+    base_headers.update({k: v for k, v in headers.items() if v})
+    try:
+        r = _no_proxy_session().get(url, headers=base_headers, params=params, timeout=timeout)
+        if r.status_code == 200:
+            try:
+                return r.json(), ""
+            except Exception:
+                return None, f"HTTP 200 แต่ response ไม่ใช่ JSON: {r.text[:120]}"
+        if r.status_code == 407:
+            return None, "HTTP 407: proxy/gateway ปฏิเสธการเชื่อมต่อ"
+        if r.status_code in (401, 403):
+            return None, f"HTTP {r.status_code}: API key ไม่ถูกต้อง สิทธิ์ไม่พอ หรือ host ไม่ได้รับอนุญาต"
+        if r.status_code == 404:
+            return None, "HTTP 404: ไม่พบ endpoint ที่เรียก"
+        if r.status_code == 429:
+            return None, "HTTP 429: เรียก API ถี่เกินไป"
+        return None, f"HTTP {r.status_code}: {r.text[:160]}"
+    except requests.exceptions.Timeout:
+        return None, "Timeout: เชื่อมต่อ GISTDA นานเกินกำหนด"
+    except requests.exceptions.ConnectionError as e:
+        return None, f"ConnectionError: {str(e)[:120]}"
+    except Exception as e:
+        return None, f"{type(e).__name__}: {str(e)[:120]}"
+
+
+def _parse_or_error(data):
+    feats = _parse_gistda_flood(data)
+    if feats is None:
+        return None, "เชื่อมต่อสำเร็จ แต่รูปแบบข้อมูล GISTDA ไม่ตรงกับ parser"
+    return feats, ""
+
+
+def _load_gistda_via_proxy(period="3day", limit=1000):
+    """
+    เรียกผ่าน proxy ของหน่วยงาน/VPS เมื่อ Streamlit Cloud ติด HTTP 407
+    ตั้งค่าใน Secrets:
+    GISTDA_PROXY_URL = "https://your-proxy-domain/gistda/flood/{period}"
+    """
+    if not GISTDA_PROXY_URL:
+        return None, ""
+    url = GISTDA_PROXY_URL.replace("{period}", period)
+    data, err = _safe_json_get(url, params={"limit": limit, "offset": 0}, timeout=35)
+    if data is None:
+        return None, f"Proxy ใช้งานไม่ได้: {err}"
+    return _parse_or_error(data)
+
+
+def _load_gistda_cache(period="3day"):
+    """
+    โหลดข้อมูลสำรองเมื่อ live API/Proxy ไม่สำเร็จ
+    รองรับไฟล์ใน repo:
+      data/gistda_flood_3day.geojson
+      data/gistda_flood_cache.geojson
+      data/gistda_flood_cache.json
+    หรือ URL ใน Secrets:
+      GISTDA_CACHE_URL = "https://raw.githubusercontent.com/.../gistda_flood_cache.geojson"
+    """
+    local_files = [
+        f"data/gistda_flood_{period}.geojson",
+        f"data/gistda_flood_{period}.json",
+        "data/gistda_flood_cache.geojson",
+        "data/gistda_flood_cache.json",
+    ]
+    for fp in local_files:
         try:
-            r = requests.get(url, headers=h, params=p, timeout=20)
-            if r.status_code == 200:
-                try:
-                    data = r.json()
-                except Exception:
-                    last_err = "200 แต่ไม่ใช่ JSON"; return None
-                feats = _parse_gistda_flood(data)
-                if feats is not None:
-                    return feats
-                last_err = "เชื่อมต่อสำเร็จ แต่รูปแบบข้อมูลไม่รู้จัก"
-            elif r.status_code == 407:
-                last_err = "HTTP 407"; proxy_blocked = True
-            elif r.status_code in (401,403):
-                last_err = f"HTTP {r.status_code}"
-            elif r.status_code == 404:
-                last_err = "HTTP 404"
-            else:
-                last_err = f"HTTP {r.status_code}"
-        except requests.exceptions.Timeout:
-            last_err = "Timeout"
-        except Exception as e:
-            last_err = f"{type(e).__name__}"
-        return None
+            with open(fp, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            feats, err = _parse_or_error(data)
+            if feats is not None:
+                return feats, f"ใช้ข้อมูลสำรองจาก {fp}"
+        except FileNotFoundError:
+            continue
+        except Exception:
+            continue
 
-    for url in endpoints:
-        for kh in key_headers:
-            res = _try(url, kh, {})
-            if res is not None:
-                return res, "", "api"
-            if proxy_blocked:
-                break  # proxy บล็อกโดเมนนี้ ลองโดเมนถัดไป
-        proxy_blocked = False
-    # query-string fallback บน endpoint แรก
-    for q in ({"api-key":GISTDA_KEY},{"apikey":GISTDA_KEY},{"key":GISTDA_KEY}):
-        res = _try(endpoints[0], {}, q)
-        if res is not None:
-            return res, "", "api"
-    return [], (last_err or "เชื่อมต่อไม่สำเร็จ"), "none"
+    if GISTDA_CACHE_URL:
+        data, err = _safe_json_get(GISTDA_CACHE_URL, timeout=35)
+        if data is None:
+            return None, f"โหลด GISTDA_CACHE_URL ไม่สำเร็จ: {err}"
+        feats, perr = _parse_or_error(data)
+        if feats is not None:
+            return feats, "ใช้ข้อมูลสำรองจาก GISTDA_CACHE_URL"
+        return None, perr
+
+    return None, ""
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_gistda_flood(period="3day", limit=1000):
+    """ดึงพื้นที่น้ำท่วมจาก GISTDA แบบทนทานต่อ HTTP 407
+
+    คืนค่า: (features_list, error_message, source)
+      source = api / proxy / cache / none
+    """
+    if period not in ("1day", "3day", "7day"):
+        period = "3day"
+
+    # 1) Proxy ก่อน หากตั้งค่าไว้ — วิธีนี้แก้ HTTP 407 บน Streamlit Cloud ได้ดีที่สุด
+    proxy_feats, proxy_err = _load_gistda_via_proxy(period, limit)
+    if proxy_feats is not None:
+        return proxy_feats, "", "proxy"
+
+    # 2) เรียก GISTDA API โดยตรง
+    last_err = ""
+    if GISTDA_KEY:
+        endpoints = [
+            f"https://api-gateway.gistda.or.th/api/2.0/resources/features/flood/{period}",
+            f"https://disaster.gistda.or.th/api/2.0/resources/features/flood/{period}",
+        ]
+        header_sets = [
+            {"API-Key": GISTDA_KEY},
+            {"api-key": GISTDA_KEY},
+            {"apikey": GISTDA_KEY},
+            {"x-api-key": GISTDA_KEY},
+            {"X-API-Key": GISTDA_KEY},
+            {"Authorization": f"Bearer {GISTDA_KEY}"},
+        ]
+        query_sets = [
+            {"limit": limit, "offset": 0},
+            {"api-key": GISTDA_KEY, "limit": limit, "offset": 0},
+            {"apikey": GISTDA_KEY, "limit": limit, "offset": 0},
+            {"key": GISTDA_KEY, "limit": limit, "offset": 0},
+            {"token": GISTDA_KEY, "limit": limit, "offset": 0},
+        ]
+        for url in endpoints:
+            for headers in header_sets:
+                for params in query_sets:
+                    data, err = _safe_json_get(url, headers=headers, params=params, timeout=30)
+                    if data is not None:
+                        feats, perr = _parse_or_error(data)
+                        if feats is not None:
+                            return feats, "", "api"
+                        last_err = perr
+                    else:
+                        last_err = err
+                    # ถ้า host โดน 407 ไม่ต้องวนซ้ำหนัก ให้ไป cache/proxy ทันที
+                    if "407" in last_err:
+                        break
+                if "407" in last_err:
+                    break
+            if "407" in last_err:
+                break
+    else:
+        last_err = "ยังไม่ได้ตั้งค่า GISTDA_KEY ใน Streamlit Secrets"
+
+    # 3) Cache สำรอง
+    cached, cache_msg = _load_gistda_cache(period)
+    if cached is not None:
+        extra = f" · สาเหตุ live API: {last_err}" if last_err else ""
+        return cached, f"{cache_msg}{extra}", "cache"
+
+    # 4) ไม่มีข้อมูลให้แสดง
+    if proxy_err and not last_err:
+        last_err = proxy_err
+    if "407" in last_err:
+        return [], (
+            "HTTP 407: Streamlit Cloud/gateway ปฏิเสธการเชื่อมต่อ GISTDA โดยตรง · "
+            "ให้ตั้ง GISTDA_PROXY_URL หรือเพิ่มไฟล์ data/gistda_flood_cache.geojson"
+        ), "none"
+    return [], (last_err or "เชื่อมต่อ GISTDA ไม่สำเร็จ"), "none"
 
 def _parse_gistda_flood(data):
     """แปลง response GISTDA หลายรูปแบบเป็น list มาตรฐาน."""
@@ -1467,7 +1600,7 @@ kpi(k[1],"🚨","วิกฤต", str(n_crit),"สถานี",
 kpi(k[2],"⚠️","เสี่ยง", str(n_heavy),"สถานี",
     "ฝนหนัก (35–90)", "เฝ้าระวัง", "c-warn")
 kpi(k[3],"🌊","น้ำท่วม", str(flood_near_count),"จุด",
-    "พื้นที่น้ำท่วมใกล้ทาง", "ข้อมูล GISTDA", "c-info")
+    "พื้นที่น้ำท่วมใกล้ทาง", f"GISTDA: {flood_source}", "c-info")
 kpi(k[4],"🌡️","อุณหภูมิ", f"{avg_temp:.0f}" if avg_temp is not None else "—","°C",
     "อุณหภูมิเฉลี่ยสูงสุด", "ทั้งเครือข่าย", "c-gold")
 kpi(k[5],"📍","ครอบคลุม", f"{n_fetched}","สถานี",
@@ -1879,22 +2012,39 @@ with tab_flood:
 
     st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
 
-    if flood_err:
+    # แสดงสถานะแหล่งข้อมูล GISTDA
+    if flood_source in ("api", "proxy") and not flood_err:
+        _src_label = "GISTDA API โดยตรง" if flood_source == "api" else "GISTDA ผ่าน Proxy"
+        st.markdown(f"""
+        <div class='alert-banner ab-ok'>
+            <div class='ab-icon'>🛰️</div>
+            <div class='ab-text'><h3>เชื่อมต่อข้อมูลน้ำท่วมสำเร็จ</h3>
+            <p>แหล่งข้อมูล: {_src_label} · พบข้อมูล {len(flood_feats)} รายการ</p></div>
+        </div>""", unsafe_allow_html=True)
+    elif flood_source == "cache" and flood_feats:
+        st.markdown(f"""
+        <div class='alert-banner ab-warn'>
+            <div class='ab-icon'>🗂️</div>
+            <div class='ab-text'><h3>แสดงข้อมูล GISTDA จาก Cache สำรอง</h3>
+            <p>{flood_err}</p></div>
+        </div>""", unsafe_allow_html=True)
+    elif flood_err:
         _is_proxy = "407" in flood_err
         if _is_proxy:
-            _title = "ไม่สามารถดึงข้อมูล GISTDA จากเซิร์ฟเวอร์นี้ (HTTP 407)"
-            _hint = ("สาเหตุ: พร็อกซีของผู้ให้บริการโฮสต์ (Streamlit Cloud) บล็อกการเชื่อมต่อไปยัง api-gateway.gistda.or.th "
-                     "— เป็นข้อจำกัดเครือข่าย ไม่ใช่ปัญหา API key (key ฝังในระบบถูกต้องแล้ว) · "
-                     "ใช้งานได้เต็มรูปแบบเมื่อรันบนเซิร์ฟเวอร์ที่เข้าถึง GISTDA ได้โดยตรง เช่น เซิร์ฟเวอร์ในองค์กร รฟท. หรือ VPS")
+            _title = "ไม่สามารถดึงข้อมูล GISTDA จาก Streamlit Cloud ได้โดยตรง (HTTP 407)"
+            _hint = ("ข้อจำกัดนี้มักเกิดจาก proxy/gateway ของผู้ให้บริการโฮสต์ ไม่ใช่ปัญหาหน้า Dashboard · "
+                     "ให้ตั้งค่า GISTDA_PROXY_URL หรือเพิ่มไฟล์ data/gistda_flood_cache.geojson เพื่อให้ระบบมีข้อมูลแสดง")
         else:
             _title = f"ข้อมูลน้ำท่วม GISTDA — {flood_err}"
-            _hint = "ระบบเชื่อม API key ไว้แล้ว จะแสดงข้อมูลอัตโนมัติเมื่อมีพื้นที่น้ำท่วม (ตามรอบบินดาวเทียม)"
+            _hint = "ตรวจสอบ GISTDA_KEY ใน Secrets หรือใช้งานผ่าน GISTDA_PROXY_URL"
         st.markdown(f"""
         <div class='alert-banner ab-warn'>
             <div class='ab-icon'>🛰️</div>
             <div class='ab-text'><h3>{_title}</h3>
             <p>{_hint}</p></div>
         </div>""", unsafe_allow_html=True)
+
+    if flood_err and flood_source == "none":
         # ปุ่มลิงก์ไปดูข้อมูล GISTDA โดยตรง (ใช้งานได้เสมอ)
         lc1, lc2, lc3 = st.columns(3)
         lc1.markdown("<a href='https://disaster.gistda.or.th/' target='_blank' style='text-decoration:none;'><div style='background:#fff;border:1px solid #e3eaf2;border-top:3px solid #2563eb;border-radius:12px;padding:13px;text-align:center;'><div style='font-size:1.5rem;'>🌊</div><div style='color:#1a2b42;font-weight:700;font-size:0.84rem;margin-top:4px;'>GISTDA Disaster</div><div style='color:#90a2bb;font-size:0.72rem;'>แดชบอร์ดน้ำท่วมทางการ</div></div></a>", unsafe_allow_html=True)
