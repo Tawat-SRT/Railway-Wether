@@ -316,10 +316,14 @@ div[data-testid="stMetric"]:hover{ transform:translateY(-2px); box-shadow:var(--
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════
-#  TOKEN  — วางครั้งเดียว จดจำถาวร (session + ไฟล์ในเครื่อง)
+#  TOKEN  — เชื่อมต่ออัตโนมัติ (ฝัง Token ในตัว) + จดจำถาวร
 # ══════════════════════════════════════════════════════════════
 import os
 _TK_FILE = os.path.join(os.path.expanduser("~"), ".srt_weather_token")
+
+# Token เริ่มต้นในตัว — เชื่อมต่อ TMD API อัตโนมัติทันทีโดยไม่ต้องกรอก
+# (uid 5439 · หมดอายุ 19 มิ.ย. 2570)
+_DEFAULT_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjMyNjM1OTYxZmM5OWFiYjVmZGFlYTU0MTczZTkwM2IzYzU0YjgyMTAyZTZhODEyZjlmODRjMjIzMzQ5N2M2YjZiNzBkOWU3ODYwOTZjODJjIn0.eyJhdWQiOiIyIiwianRpIjoiMzI2MzU5NjFmYzk5YWJiNWZkYWVhNTQxNzNlOTAzYjNjNTRiODIxMDJlNmE4MTJmOWY4NGMyMjMzNDk3YzZiNmI3MGQ5ZTc4NjA5NmM4MmMiLCJpYXQiOjE3ODE4NDI0NjksIm5iZiI6MTc4MTg0MjQ2OSwiZXhwIjoxODEzMzc4NDY5LCJzdWIiOiI1NDM5Iiwic2NvcGVzIjpbXX0.QwSO6DPacn7f-jjDAdMEraGS8HSwJkuz8y0aq1tXdPBgkNQyNnNQ7OhvIFLMwlSFThUcj46uC63ZfUiXXI3xrZC_-ACMrQdKJ4RbECcqEcWq_kuVDjoEDgs5HqadIr0eo3EfH2eNTWJieW-Uw4KZfds4i9m4CrQXGkoZN315-yXiwepz5lm9n-3Wi4GWGviaaR9kEORHOJrK0Btjipzi9VPI4cegEX01j4eri3sEzs4wVWh105RC3P3wKHbmNYEwt5T9KkewT_vMcZq6Ck5RMmtGUJu4DL1p1VOeCoUk7MbQoeYmHU3MCsGPsFHDgD7rTO7yl8NV7nszwqnR5L-9aCHZhgxKrDvcKY8sfn2ZgXNlyKm5ynu-LQJj4vpf41TjpZiydhyf6IIcxv3qGHv7utv4ynEbKNV4dA4C0LX1dkEMA3wFEcwfXv8gcBSBFEPKdpmJ44arcaqddK5UEMzGb13SFNHY2CJme9L5SCNoJvKgcm1FAH_LaRf4tWY3AZ_JL87AWURnnO8YxkM_PdKcHtmlbIBKksorofpfEj38fm6iV85dTa2d1N3hyzDKu7Z6zjtXKJYVQ0TlEn-JldGLrp_NPWi_FmPPDWMcRFhccMvm8ndNYjTJvLuCmNsZFw6BUQ3-JAGqwsJwLSWlmXnUF4QTdN91d3Tig4MiamC_P90"
 
 def _decode_jwt(token):
     try:
@@ -353,9 +357,17 @@ def _set_token(raw):
     st.session_state["_tk_uid"] = str(st.session_state["_tk_jwt"].get("sub",""))
     _save_token_file(raw)
 
+def _is_expired(token):
+    """ตรวจว่า token หมดอายุหรือยัง"""
+    try:
+        exp = _decode_jwt(token).get("exp", 0)
+        return bool(exp) and exp < time.time()
+    except Exception:
+        return False
+
 if "_tk" not in st.session_state:
     _boot = ""
-    # 1) Streamlit secrets
+    # 1) Streamlit secrets (ถ้าตั้งไว้ จะ override token ในตัว)
     try:
         _boot = str(st.secrets.get("TMD_TOKEN","") or st.secrets.get("tmd_token",""))
     except Exception:
@@ -363,10 +375,14 @@ if "_tk" not in st.session_state:
     # 2) environment variable
     if not _boot:
         _boot = os.environ.get("TMD_TOKEN","")
-    # 3) ไฟล์ที่เคยบันทึกไว้ (จดจำหลังวางครั้งแรก)
+    # 3) ไฟล์ที่ผู้ใช้เคยบันทึก (ข้ามถ้าหมดอายุแล้ว)
     if not _boot:
-        _boot = _load_token_file()
-    # set without re-writing file if it came from the file already
+        _saved = _load_token_file()
+        if _saved and not _is_expired(_saved):
+            _boot = _saved
+    # 4) Token เริ่มต้นในตัว — เชื่อมต่ออัตโนมัติ (ใช้เมื่อไม่มีแหล่งอื่น หรือของเดิมหมดอายุ)
+    if not _boot:
+        _boot = _DEFAULT_TOKEN
     st.session_state["_tk"] = _boot.strip()
     st.session_state["_tk_jwt"] = _decode_jwt(_boot.strip())
     st.session_state["_tk_uid"] = str(st.session_state["_tk_jwt"].get("sub",""))
@@ -926,32 +942,37 @@ with st.sidebar:
         exp_dt = datetime.fromtimestamp(exp, tz=TZ_TH) if exp else None
         days = (exp_dt - NOW_TH).days if exp_dt else 0
         col = "#059669" if days>30 else "#e8820c" if days>0 else "#dc2626"
+        _is_default = (_token() == _DEFAULT_TOKEN)
         st.markdown(f"""
         <div style='background:linear-gradient(135deg,#eef6ff,#f3f7fc);border:1px solid #d3deeb;border-radius:12px;padding:11px 15px;margin-bottom:8px;box-shadow:0 2px 8px rgba(30,58,95,0.05);'>
             <div style='display:flex;align-items:center;justify-content:space-between;'>
                 <div style='color:#90a2bb;font-size:0.7rem;font-weight:600;'>🔑 TMD NWP API</div>
                 <div style='width:8px;height:8px;border-radius:50%;background:{col};box-shadow:0 0 8px {col}99;'></div>
             </div>
-            <div style='color:#2563eb;font-size:0.82rem;font-weight:700;margin-top:2px;'>uid <b style='color:#1a2b42;'>{_uid()}</b></div>
-            <div style='color:{col};font-size:0.72rem;margin-top:2px;font-weight:600;'>{"เชื่อมต่อแล้ว · เหลือ "+str(days)+" วัน" if days>0 else "Token หมดอายุ"}</div>
+            <div style='color:#2563eb;font-size:0.82rem;font-weight:700;margin-top:2px;'>uid <b style='color:#1a2b42;'>{_uid()}</b> {"· เชื่อมอัตโนมัติ" if _is_default else ""}</div>
+            <div style='color:{col};font-size:0.72rem;margin-top:2px;font-weight:600;'>{"✓ พร้อมใช้งาน · เหลือ "+str(days)+" วัน" if days>0 else "Token หมดอายุ"}</div>
         </div>""", unsafe_allow_html=True)
         # slide toggle to reveal token management
         show_tk = st.toggle("🔧 แก้ไข / เปลี่ยน Token", value=False, key="show_token_mgmt")
         if show_tk:
-            st.caption("Token ถูกบันทึกไว้แล้ว ใช้ได้ทันทีทุกครั้งที่เปิด — แก้ไขเฉพาะเมื่อต้องการเปลี่ยน")
+            st.caption("ระบบเชื่อมต่ออัตโนมัติด้วย Token ในตัวอยู่แล้ว — แก้ไขเฉพาะเมื่อต้องการใช้ Token ของคุณเอง")
             nt = st.text_input("Token ใหม่", type="password", placeholder="วาง JWT token ใหม่ที่นี่",
                                label_visibility="collapsed", key="new_token")
             cc1, cc2 = st.columns(2)
             if cc1.button("💾 บันทึก", use_container_width=True):
                 if nt.strip():
                     _set_token(nt.strip()); st.cache_data.clear(); st.rerun()
-            if cc2.button("🗑️ ล้าง", use_container_width=True):
-                _set_token(""); st.cache_data.clear(); st.rerun()
+            if cc2.button("↺ ใช้ค่าเริ่มต้น", use_container_width=True):
+                _set_token(_DEFAULT_TOKEN); st.cache_data.clear(); st.rerun()
     else:
-        st.markdown("<div style='background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;padding:11px 15px;margin-bottom:8px;color:#b91c1c;font-size:0.82rem;font-weight:600;'>⚠️ วาง Token ครั้งเดียว ระบบจะจดจำไว้ให้</div>", unsafe_allow_html=True)
+        # ไม่ควรเกิดขึ้นเพราะมี default แต่เผื่อไว้
+        st.markdown("<div style='background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;padding:11px 15px;margin-bottom:8px;color:#b91c1c;font-size:0.82rem;font-weight:600;'>⚠️ ใส่ Token เพื่อเชื่อมต่อ</div>", unsafe_allow_html=True)
         ti = st.text_input("Token", type="password", placeholder="eyJ0eXA...", label_visibility="collapsed")
-        if st.button("✅ เชื่อมต่อและบันทึก", use_container_width=True):
+        c1, c2 = st.columns(2)
+        if c1.button("✅ เชื่อมต่อ", use_container_width=True):
             if ti.strip(): _set_token(ti.strip()); st.cache_data.clear(); st.rerun()
+        if c2.button("↺ ค่าเริ่มต้น", use_container_width=True):
+            _set_token(_DEFAULT_TOKEN); st.cache_data.clear(); st.rerun()
 
     st.markdown("<hr style='border-color:#e3eaf2;margin:14px 0;'>", unsafe_allow_html=True)
 
