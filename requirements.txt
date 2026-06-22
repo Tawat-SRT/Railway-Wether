@@ -7,3 +7,6 @@ streamlit-autorefresh>=1.0
 pytz>=2024.1
 matplotlib>=3.7,<4
 reportlab>=4.0,<5
+fastapi
+uvicorn
+requests
