@@ -927,7 +927,136 @@ def build_executive_pdf(meta, kpis, line_stats, top_risks, day_summary, quakes):
     return buf.getvalue()
 
 
-with st.sidebar:
+@st.cache_resource(show_spinner=False)
+def _get_mpl_thai_font():
+    """ดาวน์โหลด+ลงทะเบียนฟอนต์ไทยสำหรับ matplotlib (cache)."""
+    try:
+        import os
+        from matplotlib import font_manager
+        font_dir = os.path.join(os.path.expanduser("~"), ".srt_fonts")
+        os.makedirs(font_dir, exist_ok=True)
+        reg = os.path.join(font_dir, "Sarabun-Regular.ttf")
+        bld = os.path.join(font_dir, "Sarabun-Bold.ttf")
+        urls = {
+            reg: "https://github.com/google/fonts/raw/main/ofl/sarabun/Sarabun-Regular.ttf",
+            bld: "https://github.com/google/fonts/raw/main/ofl/sarabun/Sarabun-Bold.ttf",
+        }
+        for path, url in urls.items():
+            if not os.path.exists(path):
+                r = requests.get(url, timeout=15)
+                if r.status_code == 200:
+                    with open(path, "wb") as f: f.write(r.content)
+        for p in (reg, bld):
+            if os.path.exists(p):
+                font_manager.fontManager.addfont(p)
+        return reg if os.path.exists(reg) else None
+    except Exception:
+        return None
+
+
+def build_executive_image(meta, kpis, top_risks, severe_list, day_summary, fmt="png"):
+    """สร้างภาพรายงานสรุปผู้บริหาร (PNG/JPG) ด้วย matplotlib → bytes."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import FancyBboxPatch, Rectangle
+    from io import BytesIO
+
+    _get_mpl_thai_font()
+    plt.rcParams["font.family"] = "Sarabun"
+    plt.rcParams["axes.unicode_minus"] = False
+
+    W, H = 11.7, 8.27  # A4 landscape inches
+    fig = plt.figure(figsize=(W, H), dpi=160)
+    fig.patch.set_facecolor("#f6f9fd")
+    ax = fig.add_axes([0,0,1,1]); ax.axis("off")
+    ax.set_xlim(0,100); ax.set_ylim(0,100)
+
+    INK="#1a2b42"; INK2="#5a6e88"; INK3="#90a2bb"; BLUE="#2563eb"; CY="#0ea5e9"
+
+    def box(x,y,w,h,fc,ec=None,lw=1.0,r=0.02):
+        p=FancyBboxPatch((x,y),w,h,boxstyle=f"round,pad=0,rounding_size={r*100}",
+                         fc=fc,ec=ec or fc,lw=lw,mutation_aspect=H/W,zorder=1)
+        ax.add_patch(p); return p
+
+    # Header band
+    box(3,89,94,8.5,"#ffffff",ec="#d3deeb",lw=1.2,r=0.012)
+    ax.add_patch(Rectangle((3,89),1.1,8.5,fc=BLUE,zorder=2))
+    ax.text(5.5,94.6,"รายงานสรุปสภาพอากาศและปริมาณน้ำฝน",fontsize=20,fontweight="bold",color=INK,va="center")
+    ax.text(5.5,91.3,"ศูนย์ความปลอดภัย ฝ่ายการช่างโยธา · การรถไฟแห่งประเทศไทย",fontsize=11,color=INK2,va="center")
+    ax.text(94.5,94.6,meta["datetime"],fontsize=10,color=INK2,va="center",ha="right")
+    ax.text(94.5,91.3,f"เส้นทาง: {meta['line']}  ·  พยากรณ์: {meta['day']}",fontsize=9.5,color=INK3,va="center",ha="right")
+
+    # Status verdict bar
+    sv=meta["verdict"]
+    box(3,81,94,6.2,sv["color"],r=0.012)
+    ax.text(5.5,84.1,sv["title"],fontsize=15,fontweight="bold",color="white",va="center")
+    ax.text(40,84.1,sv["detail"],fontsize=10.5,color="white",va="center")
+
+    # KPI tiles (6)
+    kx, kw, kgap = 3, 14.7, 1.16
+    ky, kh = 70.5, 8.6
+    for i,(lab,val,unit,hexc) in enumerate(kpis):
+        x = kx + i*(kw+kgap)
+        box(x,ky,kw,kh,"#ffffff",ec="#e3eaf2",lw=1.0,r=0.02)
+        ax.add_patch(Rectangle((x,ky+kh-0.5),kw,0.5,fc=hexc,zorder=2))
+        ax.text(x+kw/2,ky+kh-2.2,lab,fontsize=8,color=INK2,ha="center",va="center")
+        ax.text(x+kw/2,ky+kh-5.0,f"{val}",fontsize=20,fontweight="bold",color=hexc,ha="center",va="center")
+        ax.text(x+kw/2,ky+1.4,unit,fontsize=8,color=INK3,ha="center",va="center")
+
+    # Left: Top risk stations
+    box(3,30,46,37,"#ffffff",ec="#e3eaf2",lw=1.0,r=0.012)
+    ax.text(5.5,64.3,"🚨 สถานีเสี่ยงสูงสุด",fontsize=12.5,fontweight="bold",color=BLUE,va="center")
+    ax.plot([5.5,46.5],[62.5,62.5],color="#e3eaf2",lw=1)
+    if top_risks:
+        for i,(nm,prov,line,rain,lab,hx) in enumerate(top_risks[:7]):
+            yy=59.5-i*4.0
+            ax.text(5.5,yy,f"{i+1}",fontsize=11,fontweight="bold",color=INK3,va="center")
+            ax.text(8.5,yy+0.6,nm[:26],fontsize=9.5,fontweight="bold",color=INK,va="center")
+            ax.text(8.5,yy-1.4,f"{prov} · {line}",fontsize=7.5,color=INK3,va="center")
+            ax.text(46,yy,f"{rain:.0f} มม." if rain is not None else "—",fontsize=11,fontweight="bold",color=hx,va="center",ha="right")
+    else:
+        ax.text(25,48,"ไม่มีข้อมูลปริมาณฝน",fontsize=10,color=INK3,ha="center")
+
+    # Right: Severe weather alerts
+    box(51,30,46,37,"#ffffff",ec="#e3eaf2",lw=1.0,r=0.012)
+    ax.text(53.5,64.3,"⚠️ การเตือนภัยสภาพอากาศร้าย",fontsize=12.5,fontweight="bold",color="#dc2626",va="center")
+    ax.plot([53.5,94.5],[62.5,62.5],color="#e3eaf2",lw=1)
+    if severe_list:
+        for i,(nm,prov,txt,hx) in enumerate(severe_list[:7]):
+            yy=59.5-i*4.0
+            ax.add_patch(Rectangle((53.5,yy-1.1),1.0,2.6,fc=hx,zorder=2))
+            ax.text(55.5,yy+0.6,nm[:24],fontsize=9.5,fontweight="bold",color=INK,va="center")
+            ax.text(55.5,yy-1.4,f"{prov}",fontsize=7.5,color=INK3,va="center")
+            ax.text(94,yy,txt,fontsize=8.5,fontweight="bold",color=hx,va="center",ha="right")
+    else:
+        ax.text(74,48,"✅ ไม่มีการเตือนภัยสภาพอากาศร้าย",fontsize=10.5,color="#059669",ha="center",fontweight="bold")
+
+    # Bottom: 7-day outlook strip
+    box(3,8,94,19,"#ffffff",ec="#e3eaf2",lw=1.0,r=0.012)
+    ax.text(5.5,24.3,"📈 แนวโน้มความเสี่ยงฝน 7 วันข้างหน้า (ฝนสูงสุดรวมทั้งเครือข่าย)",fontsize=12,fontweight="bold",color=BLUE,va="center")
+    if day_summary:
+        n=len(day_summary); cw=88/n; cx0=5.5
+        maxv=max([(d["max"] or 0) for d in day_summary]+[10])
+        for i,d in enumerate(day_summary):
+            cx=cx0+i*cw
+            v=d["max"] or 0
+            bh=(v/maxv)*9 if maxv else 0
+            ax.add_patch(Rectangle((cx+cw*0.2,10.5),cw*0.6,bh,fc=d["hex"],zorder=2))
+            ax.text(cx+cw/2,10.5+bh+0.9,f"{v:.0f}",fontsize=8.5,fontweight="bold",color=d["hex"],ha="center",va="bottom")
+            ax.text(cx+cw/2,9.0,d["label"],fontsize=8,color=INK2,ha="center",va="center")
+
+    # Footer
+    ax.text(3,4.5,"ข้อมูลพยากรณ์: กรมอุตุนิยมวิทยา (TMD NWP API)  ·  พัฒนาโดย วิศวกรกำกับการกองทางถาวร  ·  Ver. ทดลอง",
+            fontsize=7.5,color=INK3,va="center")
+
+    buf=BytesIO()
+    save_fmt = "jpeg" if fmt.lower() in ("jpg","jpeg") else "png"
+    fig.savefig(buf,format=save_fmt,dpi=160,facecolor=fig.get_facecolor(),bbox_inches=None)
+    plt.close(fig); buf.seek(0)
+    return buf.getvalue()
+
+
     st.markdown("""
     <div style='text-align:center;padding:10px 0 16px;'>
         <div style='font-size:2.6rem;'>🚆</div>
@@ -936,43 +1065,21 @@ with st.sidebar:
         <div style='color:#90a2bb;font-size:0.7rem;letter-spacing:0.5px;margin-top:2px;'>การรถไฟแห่งประเทศไทย</div>
     </div>""", unsafe_allow_html=True)
 
-    # Token
+    # Token — เชื่อมต่ออัตโนมัติ ไม่แสดงปุ่มแก้ไข
     if _token():
         jd = _jwt(); exp = jd.get("exp",0)
         exp_dt = datetime.fromtimestamp(exp, tz=TZ_TH) if exp else None
         days = (exp_dt - NOW_TH).days if exp_dt else 0
         col = "#059669" if days>30 else "#e8820c" if days>0 else "#dc2626"
-        _is_default = (_token() == _DEFAULT_TOKEN)
         st.markdown(f"""
         <div style='background:linear-gradient(135deg,#eef6ff,#f3f7fc);border:1px solid #d3deeb;border-radius:12px;padding:11px 15px;margin-bottom:8px;box-shadow:0 2px 8px rgba(30,58,95,0.05);'>
             <div style='display:flex;align-items:center;justify-content:space-between;'>
                 <div style='color:#90a2bb;font-size:0.7rem;font-weight:600;'>🔑 TMD NWP API</div>
                 <div style='width:8px;height:8px;border-radius:50%;background:{col};box-shadow:0 0 8px {col}99;'></div>
             </div>
-            <div style='color:#2563eb;font-size:0.82rem;font-weight:700;margin-top:2px;'>uid <b style='color:#1a2b42;'>{_uid()}</b> {"· เชื่อมอัตโนมัติ" if _is_default else ""}</div>
+            <div style='color:#2563eb;font-size:0.82rem;font-weight:700;margin-top:2px;'>เชื่อมต่ออัตโนมัติ <b style='color:#1a2b42;'>· uid {_uid()}</b></div>
             <div style='color:{col};font-size:0.72rem;margin-top:2px;font-weight:600;'>{"✓ พร้อมใช้งาน · เหลือ "+str(days)+" วัน" if days>0 else "Token หมดอายุ"}</div>
         </div>""", unsafe_allow_html=True)
-        # slide toggle to reveal token management
-        show_tk = st.toggle("🔧 แก้ไข / เปลี่ยน Token", value=False, key="show_token_mgmt")
-        if show_tk:
-            st.caption("ระบบเชื่อมต่ออัตโนมัติด้วย Token ในตัวอยู่แล้ว — แก้ไขเฉพาะเมื่อต้องการใช้ Token ของคุณเอง")
-            nt = st.text_input("Token ใหม่", type="password", placeholder="วาง JWT token ใหม่ที่นี่",
-                               label_visibility="collapsed", key="new_token")
-            cc1, cc2 = st.columns(2)
-            if cc1.button("💾 บันทึก", use_container_width=True):
-                if nt.strip():
-                    _set_token(nt.strip()); st.cache_data.clear(); st.rerun()
-            if cc2.button("↺ ใช้ค่าเริ่มต้น", use_container_width=True):
-                _set_token(_DEFAULT_TOKEN); st.cache_data.clear(); st.rerun()
-    else:
-        # ไม่ควรเกิดขึ้นเพราะมี default แต่เผื่อไว้
-        st.markdown("<div style='background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;padding:11px 15px;margin-bottom:8px;color:#b91c1c;font-size:0.82rem;font-weight:600;'>⚠️ ใส่ Token เพื่อเชื่อมต่อ</div>", unsafe_allow_html=True)
-        ti = st.text_input("Token", type="password", placeholder="eyJ0eXA...", label_visibility="collapsed")
-        c1, c2 = st.columns(2)
-        if c1.button("✅ เชื่อมต่อ", use_container_width=True):
-            if ti.strip(): _set_token(ti.strip()); st.cache_data.clear(); st.rerun()
-        if c2.button("↺ ค่าเริ่มต้น", use_container_width=True):
-            _set_token(_DEFAULT_TOKEN); st.cache_data.clear(); st.rerun()
 
     st.markdown("<hr style='border-color:#e3eaf2;margin:14px 0;'>", unsafe_allow_html=True)
 
@@ -993,12 +1100,16 @@ with st.sidebar:
         day_idx = max(0, min(6, (picked - _min).days))
         sel_day = f"{picked.day} {TH_MONTHS[picked.month]} {picked.year+543}"
 
-    st.markdown("<div style='color:#2563eb;font-size:0.74rem;font-weight:700;letter-spacing:0.6px;margin:12px 0 5px;'>🔴 Real-time</div>", unsafe_allow_html=True)
-    auto = st.toggle("เชื่อมข้อมูลอัตโนมัติ", value=False)
-    refresh_sec = 0
-    if auto:
-        rl = st.selectbox("rate", ["1 นาที","5 นาที","10 นาที"], index=1, label_visibility="collapsed")
-        refresh_sec = {"1 นาที":60,"5 นาที":300,"10 นาที":600}[rl]
+    # Real-time — เปิดตลอดเวลา (อัพเดตทุก 5 นาที อัตโนมัติ)
+    refresh_sec = 300
+    st.markdown("""
+    <div style='background:linear-gradient(135deg,#ecfdf5,#f0fdf4);border:1px solid #86efac;border-radius:12px;padding:10px 14px;margin:14px 0 4px;'>
+        <div style='display:flex;align-items:center;gap:8px;'>
+            <span style='width:9px;height:9px;border-radius:50%;background:#10b981;box-shadow:0 0 8px #10b981;animation:livepulse 2s infinite;'></span>
+            <span style='color:#059669;font-weight:700;font-size:0.82rem;'>REAL-TIME · ทำงานตลอดเวลา</span>
+        </div>
+        <div style='color:#5a6e88;font-size:0.72rem;margin-top:3px;'>อัพเดตข้อมูลอัตโนมัติทุก 5 นาที</div>
+    </div>""", unsafe_allow_html=True)
 
     if st.button("🔄 รีเฟรชเดี๋ยวนี้", use_container_width=True):
         st.cache_data.clear(); st.rerun()
@@ -1007,7 +1118,6 @@ with st.sidebar:
     <div style='color:#90a2bb;font-size:0.74rem;margin-top:12px;line-height:1.7;'>
         🕐 ดึงข้อมูลล่าสุด<br>
         <span style='color:#2563eb;font-weight:700;font-size:0.84rem;'>{th_datetime(NOW_TH)}</span>
-        {"<br><span style='color:#10b981;'>🔴 auto-refresh เปิด</span>" if auto else ""}
     </div>""", unsafe_allow_html=True)
 
     st.markdown("<hr style='border-color:#e3eaf2;margin:14px 0;'>", unsafe_allow_html=True)
@@ -1275,32 +1385,86 @@ with tab_dash:
 
     st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
 
-    # — Per-line rainfall bars —
-    st.markdown("<div class='panel'><div class='panel-h'>🌧️ ปริมาณน้ำฝนเฉลี่ย/สูงสุด แยกตามสายทาง</div>", unsafe_allow_html=True)
-    line_stat = {}
+    # — สรุปข้อมูลการเตือนภัยสภาพอากาศร้าย —
+    st.markdown("<div class='panel'><div class='panel-h'>⚠️ สรุปการเตือนภัยสภาพอากาศร้าย</div>", unsafe_allow_html=True)
+    # รวบรวมสถานีที่เข้าเกณฑ์เตือนภัย (ฝนหนัก/หนักมาก + ลมแรง)
+    severe = []
     for s in station_data:
-        L = s["line"]
-        line_stat.setdefault(L, {"vals":[], "color":s["line_color"], "icon":s["line_icon"]})
-        if s["rain"] is not None: line_stat[L]["vals"].append(s["rain"])
-    maxbar = max((max(v["vals"]) for v in line_stat.values() if v["vals"]), default=10)
-    maxbar = max(maxbar, 10)
-    for L, st_ in line_stat.items():
-        v = st_["vals"]
-        mx = max(v) if v else 0
-        av = sum(v)/len(v) if v else 0
-        w = mx/maxbar*100 if mx else 0
-        hx = rain_hex(mx)
-        st.markdown(f"""
-        <div class='rain-row'>
-            <div class='rain-name'>{st_['icon']} {L}</div>
-            <div class='rain-track'>
-                <div class='rain-fill' style='width:{w:.1f}%;background:linear-gradient(90deg,{hx}99,{hx});'>
-                    <span style='font-size:0.7rem;color:#ffffff;font-weight:700;'>{("เฉลี่ย "+format(av,'.0f')) if av else ""}</span>
-                </div>
-            </div>
-            <div class='rain-val' style='color:{hx};'>{mx:.0f}</div>
+        r = s.get("rain"); w = s.get("ws")
+        reasons = []
+        if r is not None and r >= 90: reasons.append(("ฝนหนักมาก", f"{r:.0f} มม.", "#dc2626"))
+        elif r is not None and r >= 35: reasons.append(("ฝนหนัก", f"{r:.0f} มม.", "#e8820c"))
+        if w is not None and w >= 10: reasons.append(("ลมกระโชกแรง", f"{w:.0f} m/s", "#7c3aed"))
+        if reasons:
+            severe.append((s, reasons))
+    severe.sort(key=lambda x: x[0].get("rain") or 0, reverse=True)
+
+    sv_cols = st.columns(4)
+    n_storm = sum(1 for s in station_data if (s.get("cond") in (7,8)))
+    n_wind  = sum(1 for s in station_data if (s.get("ws") or 0) >= 10)
+    sv_metrics = [
+        ("🌊","ฝนหนักมาก", n_crit, "#dc2626", "เกิน 90 มม./วัน"),
+        ("⛈️","พายุฝนฟ้าคะนอง", n_storm, "#e8820c", "สภาพอากาศรหัส 7-8"),
+        ("💨","ลมแรง", n_wind, "#7c3aed", "เกิน 10 m/s"),
+        ("📍","จุดเตือนภัยรวม", len(severe), "#2563eb", "สถานีเข้าเกณฑ์"),
+    ]
+    for col,(ic,lab,val,hx,sub) in zip(sv_cols, sv_metrics):
+        col.markdown(f"""
+        <div style='background:#f7fafd;border:1px solid #e3eaf2;border-left:3px solid {hx};border-radius:10px;padding:11px 14px;'>
+            <div style='font-size:1.3rem;'>{ic}</div>
+            <div style='font-family:Kanit;font-size:1.5rem;font-weight:700;color:{hx};line-height:1;margin:3px 0;'>{val}</div>
+            <div style='color:#5a6e88;font-size:0.76rem;font-weight:600;'>{lab}</div>
+            <div style='color:#90a2bb;font-size:0.68rem;'>{sub}</div>
         </div>""", unsafe_allow_html=True)
-    st.markdown("<div style='color:#90a2bb;font-size:0.74rem;margin-top:8px;'>แถบแสดงปริมาณฝนสูงสุดของแต่ละสาย (มม.) · ตัวเลขในแถบคือค่าเฉลี่ย</div></div>", unsafe_allow_html=True)
+
+    st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+    if severe:
+        for s, reasons in severe[:6]:
+            tags = " ".join(f"<span style='background:{c}1a;color:{c};border:1px solid {c}55;padding:2px 9px;border-radius:20px;font-size:0.72rem;font-weight:700;margin-right:4px;'>{lab} {val}</span>" for lab,val,c in reasons)
+            st.markdown(f"""
+            <div style='display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff;border:1px solid #e3eaf2;border-radius:10px;padding:10px 14px;margin:4px 0;'>
+                <div>
+                    <span style='color:#1a2b42;font-weight:700;font-size:0.88rem;'>{s['line_icon']} {s['name']}</span>
+                    <span style='color:#90a2bb;font-size:0.74rem;'> · {s['province']} · {s['line']}</span>
+                </div>
+                <div style='text-align:right;white-space:nowrap;'>{tags}</div>
+            </div>""", unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style='background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:14px 18px;text-align:center;'>
+            <span style='font-size:1.5rem;'>✅</span>
+            <span style='color:#059669;font-weight:700;font-size:0.95rem;margin-left:8px;'>ไม่มีการเตือนภัยสภาพอากาศร้ายในเส้นทาง</span>
+        </div>""", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
+
+    # — แหล่งแจ้งเตือนภัยพิบัติที่เกี่ยวข้อง —
+    st.markdown("<div class='panel'><div class='panel-h'>📡 ศูนย์แจ้งเตือนภัยพิบัติ & เรดาร์ตรวจอากาศ</div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:#90a2bb;font-size:0.76rem;margin-bottom:10px;'>แหล่งข้อมูลแจ้งเตือนภัยและติดตามกลุ่มเมฆฝนแบบ real-time สำหรับเจ้าหน้าที่</div>", unsafe_allow_html=True)
+    alert_sources = [
+        ("🚨","Thai Disaster Alert (THDA)","แจ้งเตือนภัยพิบัติแห่งชาติ ปภ.","https://thda.disaster.go.th","#dc2626"),
+        ("🛡️","พ้นภัย (PhonPhai)","แอปแจ้งเตือนภัยพิบัติ สสน.","https://www.phonphai.in.th","#e8820c"),
+        ("🌤️","Thai Weather","พยากรณ์อากาศ กรมอุตุนิยมวิทยา","https://www.tmd.go.th","#2563eb"),
+        ("📻","Zello Walkie Talkie","วิทยุสื่อสารฉุกเฉินกลุ่มกู้ภัย","https://zello.com","#059669"),
+        ("📡","เรดาร์ฝน กรมอุตุนิยมวิทยา","กลุ่มเมฆฝนเรดาร์ real-time","https://weather.tmd.go.th/radar.php","#0ea5e9"),
+        ("🌧️","เรดาร์ฝนหลวง","ภาพเรดาร์ กรมฝนหลวงฯ","https://www.royalrain.go.th","#7c3aed"),
+        ("🏙️","ศูนย์ควบคุมน้ำ กทม.","เรดาร์ฝน-น้ำท่วม กรุงเทพมหานคร","https://weather.bangkok.go.th","#c2410c"),
+    ]
+    asc = st.columns(4)
+    for i,(ic,name,desc,url,hx) in enumerate(alert_sources):
+        with asc[i % 4]:
+            st.markdown(f"""
+            <a href='{url}' target='_blank' style='text-decoration:none;'>
+            <div style='background:#fff;border:1px solid #e3eaf2;border-top:3px solid {hx};border-radius:12px;padding:13px 14px;margin:4px 0;min-height:118px;transition:all .15s;box-shadow:0 1px 4px rgba(30,58,95,0.05);'
+                onmouseover="this.style.boxShadow='0 6px 18px rgba(30,58,95,0.13)';this.style.transform='translateY(-3px)'"
+                onmouseout="this.style.boxShadow='0 1px 4px rgba(30,58,95,0.05)';this.style.transform='translateY(0)'">
+                <div style='font-size:1.6rem;'>{ic}</div>
+                <div style='color:#1a2b42;font-weight:700;font-size:0.84rem;margin-top:5px;line-height:1.25;'>{name}</div>
+                <div style='color:#90a2bb;font-size:0.72rem;margin-top:3px;line-height:1.3;'>{desc}</div>
+                <div style='color:{hx};font-size:0.7rem;font-weight:700;margin-top:6px;'>เปิดดู →</div>
+            </div></a>""", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ╔═══════════════════════════════════════════════════════════╗
 # ║  TAB: RAINFALL FOCUS                                      ║
@@ -1655,7 +1819,7 @@ st.markdown(f"""
     <span>พัฒนาโดย วิศวกรกำกับการกองทางถาวร · อัพเดต {th_datetime(NOW_TH)}</span>
 </div>""", unsafe_allow_html=True)
 
-if auto and refresh_sec>0:
+if refresh_sec>0:
     done=False
     try:
         from streamlit_autorefresh import st_autorefresh
