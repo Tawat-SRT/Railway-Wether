@@ -603,6 +603,95 @@ def parse_earthquakes(geojson):
     out.sort(key=lambda x: x["ts"], reverse=True)
     return out
 
+# ── GISTDA flood data integration ──
+GISTDA_KEY = "nH0aUzEb1BKF3It2xD2j11FeXabtrsmUh7ZZJz7Vcy6980TBbPmecGISZm3h2Jbt"
+
+def _haversine(lat1, lon1, lat2, lon2):
+    """ระยะทางระหว่าง 2 พิกัด (กม.)"""
+    R = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2-lat1); dl = math.radians(lon2-lon1)
+    a = math.sin(dp/2)**2 + math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
+    return 2*R*math.asin(math.sqrt(a))
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_gistda_flood():
+    """ดึงพื้นที่น้ำท่วมจาก GISTDA sphere API (พยายามหลาย endpoint, ทนต่อ schema ที่ต่างกัน).
+       คืน (features_list, error). แต่ละ feature = {province, lat, lon, area_rai, date}."""
+    base_candidates = [
+        # sphere disaster flood (จังหวัดที่มีน้ำท่วม)
+        ("https://sphere.gistda.or.th/api/1.0/disaster/flood/now", {"key":GISTDA_KEY}),
+        ("https://sphere.gistda.or.th/api/disaster/flood", {"key":GISTDA_KEY}),
+        ("https://disaster.gistda.or.th/api/flood/latest", {"key":GISTDA_KEY}),
+    ]
+    for url, params in base_candidates:
+        try:
+            r = requests.get(url, params=params, timeout=12,
+                             headers={"accept":"application/json"})
+            if r.status_code == 200:
+                try:
+                    data = r.json()
+                except Exception:
+                    continue
+                feats = _parse_gistda_flood(data)
+                if feats is not None:
+                    return feats, ""
+            elif r.status_code in (401,403):
+                return [], f"GISTDA HTTP {r.status_code}: API key ไม่ถูกต้อง/ไม่มีสิทธิ์"
+        except Exception:
+            continue
+    return [], "ไม่สามารถเชื่อมต่อ GISTDA API (อาจปิดชั่วคราว/นอกฤดูน้ำท่วม)"
+
+def _parse_gistda_flood(data):
+    """แปลง response GISTDA หลายรูปแบบเป็น list มาตรฐาน."""
+    if data is None: return None
+    rows = []
+    # GeoJSON FeatureCollection
+    if isinstance(data, dict) and data.get("type") == "FeatureCollection":
+        for f in data.get("features", []):
+            p = f.get("properties", {}) or {}
+            g = f.get("geometry", {}) or {}
+            c = g.get("coordinates")
+            lat=lon=None
+            if isinstance(c, list) and c:
+                # point or polygon centroid
+                if isinstance(c[0],(int,float)) and len(c)>=2:
+                    lon, lat = c[0], c[1]
+                else:
+                    try:
+                        flat=[]
+                        def _collect(x):
+                            if isinstance(x,(int,float)): return
+                            if x and isinstance(x[0],(int,float)) and len(x)>=2: flat.append(x)
+                            else:
+                                for y in x: _collect(y)
+                        _collect(c)
+                        if flat:
+                            lon=sum(p2[0] for p2 in flat)/len(flat)
+                            lat=sum(p2[1] for p2 in flat)/len(flat)
+                    except Exception: pass
+            rows.append({"province":_scalar(_pick(p,"province","prov_name","CHANGWAT","name")) or "—",
+                         "lat":lat,"lon":lon,
+                         "area_rai":_to_float(_pick(p,"area_rai","area","flood_area","rai")),
+                         "date":_scalar(_pick(p,"date","flood_date","update","datetime")) or ""})
+        return rows
+    # plain list of records
+    if isinstance(data, list):
+        for p in data:
+            if not isinstance(p, dict): continue
+            rows.append({"province":_scalar(_pick(p,"province","prov_name","name")) or "—",
+                         "lat":_to_float(_pick(p,"lat","latitude","y")),
+                         "lon":_to_float(_pick(p,"lon","lng","longitude","x")),
+                         "area_rai":_to_float(_pick(p,"area_rai","area","rai")),
+                         "date":_scalar(_pick(p,"date","flood_date","update")) or ""})
+        return rows
+    # dict wrapping a list
+    if isinstance(data, dict):
+        for key in ("data","results","features","items","flood"):
+            if key in data and isinstance(data[key], list):
+                return _parse_gistda_flood(data[key])
+    return None
+
 # ── parse helpers ──
 def _scalar(v):
     if v is None: return None
@@ -1194,6 +1283,29 @@ earthquakes = parse_earthquakes(eq_data)
 eq_felt = [e for e in earthquakes if (e["mag"] or 0) >= 4.5]
 eq_max = max((e["mag"] or 0) for e in earthquakes) if earthquakes else None
 
+# GISTDA flood data
+flood_feats, flood_err = fetch_gistda_flood()
+# จับคู่จุดน้ำท่วมที่อยู่ใกล้สถานีรถไฟ (รัศมี 30 กม.)
+flood_near = []
+_flood_provinces = set()
+for ff in flood_feats:
+    near_stn = None; near_d = 999
+    if ff.get("lat") is not None and ff.get("lon") is not None:
+        for s in station_data:
+            d = _haversine(ff["lat"], ff["lon"], s["lat"], s["lon"])
+            if d < near_d:
+                near_d = d; near_stn = s
+        if near_d <= 30:
+            flood_near.append({**ff, "near_station":near_stn["name"] if near_stn else "—",
+                               "near_line":near_stn["line"] if near_stn else "—", "dist":near_d})
+    # province-based match (เผื่อไม่มีพิกัด)
+    if ff.get("province") and ff["province"] != "—":
+        _flood_provinces.add(ff["province"])
+# province match กับสถานี
+_rail_provinces = {s["province"] for s in station_data}
+flood_prov_match = _flood_provinces & _rail_provinces
+flood_near_count = len(flood_near) if flood_near else len(flood_prov_match)
+
 # ══════════════════════════════════════════════════════════════
 #  HEADER
 # ══════════════════════════════════════════════════════════════
@@ -1298,12 +1410,12 @@ def kpi(col, ico, tag, val, unit, lab, foot, cls):
 k = st.columns(6)
 kpi(k[0],"🌧️","สูงสุด", f"{max_rain:.0f}" if max_rain is not None else "—","มม.",
     "ปริมาณฝนสูงสุด", "ในเส้นทางที่เลือก", "c-cyan")
-kpi(k[1],"📊","เฉลี่ย", f"{avg_rain:.1f}" if avg_rain is not None else "—","มม.",
-    "ฝนเฉลี่ยทุกสถานี", f"รวม {total_rain:.0f} มม." , "c-info")
-kpi(k[2],"🚨","วิกฤต", str(n_crit),"สถานี",
+kpi(k[1],"🚨","วิกฤต", str(n_crit),"สถานี",
     "ฝนหนักมาก (>90)", "ต้องระวังสูงสุด", "c-crit")
-kpi(k[3],"⚠️","เสี่ยง", str(n_heavy),"สถานี",
+kpi(k[2],"⚠️","เสี่ยง", str(n_heavy),"สถานี",
     "ฝนหนัก (35–90)", "เฝ้าระวัง", "c-warn")
+kpi(k[3],"🌊","น้ำท่วม", str(flood_near_count),"จุด",
+    "พื้นที่น้ำท่วมใกล้ทาง", "ข้อมูล GISTDA", "c-info")
 kpi(k[4],"🌡️","อุณหภูมิ", f"{avg_temp:.0f}" if avg_temp is not None else "—","°C",
     "อุณหภูมิเฉลี่ยสูงสุด", "ทั้งเครือข่าย", "c-gold")
 kpi(k[5],"📍","ครอบคลุม", f"{n_fetched}","สถานี",
@@ -1314,9 +1426,9 @@ st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
 # ══════════════════════════════════════════════════════════════
 #  TABS
 # ══════════════════════════════════════════════════════════════
-tab_dash, tab_rain, tab_7day, tab_map, tab_lines, tab_quake, tab_detail = st.tabs([
-    "📊 ภาพรวมผู้บริหาร", "🌧️ ปริมาณน้ำฝน", "📈 เสี่ยง 7 วัน", "🗺️ แผนที่",
-    "🛤️ รายสาย", "🌋 แผ่นดินไหว", "🔍 เจาะลึกสถานี"])
+tab_dash, tab_rain, tab_7day, tab_flood, tab_map, tab_lines, tab_quake, tab_detail = st.tabs([
+    "📊 ภาพรวมผู้บริหาร", "🌧️ ปริมาณน้ำฝน", "📈 เสี่ยง 7 วัน", "🌊 น้ำท่วม GISTDA",
+    "🗺️ แผนที่", "🛤️ รายสาย", "🌋 แผ่นดินไหว", "🔍 เจาะลึกสถานี"])
 
 # ╔═══════════════════════════════════════════════════════════╗
 # ║  TAB: EXECUTIVE OVERVIEW                                  ║
@@ -1694,6 +1806,99 @@ with tab_7day:
             row += "</div>"
             st.markdown(row, unsafe_allow_html=True)
         st.markdown("<div style='color:#90a2bb;font-size:0.72rem;margin-top:8px;'>🟢 0-10 · 🔵 10-35 · 🟠 35-90 · 🔴 >90 มม./วัน · แสดง 18 สถานีเสี่ยงสูงสุด</div></div>", unsafe_allow_html=True)
+
+# ╔═══════════════════════════════════════════════════════════╗
+# ║  TAB: GISTDA FLOOD                                        ║
+# ╚═══════════════════════════════════════════════════════════╝
+with tab_flood:
+    st.markdown("<div class='sec-label'>พื้นที่น้ำท่วมจากดาวเทียม GISTDA — บูรณาการกับโครงข่ายรถไฟ</div>", unsafe_allow_html=True)
+
+    # KPI summary
+    fk = st.columns(4)
+    _tot_area = sum(f.get("area_rai") or 0 for f in flood_feats)
+    fk[0].markdown(f"""<div class='kpi c-info'><div class='kpi-top'><span class='kpi-ico'>🌊</span><span class='kpi-tag'>ทั้งหมด</span></div>
+        <div class='kpi-val'>{len(flood_feats)}</div><div class='kpi-lab'>พื้นที่น้ำท่วม</div><div class='kpi-foot'>จากดาวเทียม GISTDA</div></div>""", unsafe_allow_html=True)
+    fk[1].markdown(f"""<div class='kpi c-crit'><div class='kpi-top'><span class='kpi-ico'>🚧</span><span class='kpi-tag'>ใกล้ทาง</span></div>
+        <div class='kpi-val'>{len(flood_near)}</div><div class='kpi-lab'>จุดใกล้ทางรถไฟ</div><div class='kpi-foot'>รัศมี 30 กม.</div></div>""", unsafe_allow_html=True)
+    fk[2].markdown(f"""<div class='kpi c-warn'><div class='kpi-top'><span class='kpi-ico'>🏞️</span><span class='kpi-tag'>พื้นที่</span></div>
+        <div class='kpi-val'>{_tot_area:,.0f}</div><div class='kpi-lab'>ไร่ (รวม)</div><div class='kpi-foot'>พื้นที่น้ำท่วมสะสม</div></div>""", unsafe_allow_html=True)
+    fk[3].markdown(f"""<div class='kpi c-gold'><div class='kpi-top'><span class='kpi-ico'>🗺️</span><span class='kpi-tag'>จังหวัด</span></div>
+        <div class='kpi-val'>{len(flood_prov_match)}</div><div class='kpi-lab'>จังหวัดที่มีทางรถไฟ</div><div class='kpi-foot'>และมีน้ำท่วม</div></div>""", unsafe_allow_html=True)
+
+    st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+
+    if flood_err:
+        st.markdown(f"""
+        <div class='alert-banner ab-warn'>
+            <div class='ab-icon'>🛰️</div>
+            <div class='ab-text'><h3>ข้อมูลน้ำท่วม GISTDA</h3>
+            <p>{flood_err} · ระบบยังคงเชื่อม API key ไว้แล้ว จะแสดงข้อมูลอัตโนมัติเมื่อมีพื้นที่น้ำท่วม</p></div>
+        </div>""", unsafe_allow_html=True)
+
+    cflood1, cflood2 = st.columns([1.3, 1])
+
+    # Flood map
+    with cflood1:
+        st.markdown("<div class='panel'><div class='panel-h'>🗺️ แผนที่พื้นที่น้ำท่วม & เส้นทางรถไฟ</div>", unsafe_allow_html=True)
+        try:
+            import folium
+            from streamlit_folium import st_folium
+            fm = folium.Map(location=[14.5,101.0], zoom_start=6, tiles=None)
+            folium.TileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+                             attr="© CARTO", max_zoom=19).add_to(fm)
+            # GISTDA WMS flood overlay (ภาพพื้นที่น้ำท่วมจากดาวเทียม)
+            try:
+                folium.raster_layers.WmsTileLayer(
+                    url="https://disaster.gistda.or.th/geoserver/flood/wms",
+                    layers="flood:flood_latest", fmt="image/png", transparent=True,
+                    name="GISTDA Flood", overlay=True, opacity=0.55,
+                ).add_to(fm)
+            except Exception:
+                pass
+            # rail lines
+            for ln, ld in SRT_LINES.items():
+                coords=[[s["lat"],s["lon"]] for s in ld["stations"]]
+                folium.PolyLine(coords, color=ld["color"], weight=2.5, opacity=0.7, tooltip=ln).add_to(fm)
+            # flood markers
+            for f in flood_feats:
+                if f.get("lat") is None or f.get("lon") is None: continue
+                area = f.get("area_rai") or 0
+                folium.CircleMarker([f["lat"],f["lon"]], radius=6, color="#0ea5e9",
+                    fill=True, fill_color="#3b82f6", fill_opacity=0.5,
+                    popup=folium.Popup(f"<b>{f['province']}</b><br>พื้นที่ {area:,.0f} ไร่<br>{f['date']}", max_width=220),
+                    tooltip=f"น้ำท่วม {f['province']}").add_to(fm)
+            st.caption("🔵 พื้นที่น้ำท่วม (GISTDA) · เส้นสี = เส้นทางรถไฟ · overlay จากดาวเทียม")
+            st_folium(fm, width="100%", height=500, returned_objects=[])
+        except ImportError:
+            st.info("ติดตั้ง folium เพื่อแสดงแผนที่")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # Flood near railway list
+    with cflood2:
+        st.markdown("<div class='panel'><div class='panel-h'>🚧 จุดน้ำท่วมใกล้ทางรถไฟ</div>", unsafe_allow_html=True)
+        if flood_near:
+            for f in sorted(flood_near, key=lambda x:x["dist"])[:12]:
+                area = f.get("area_rai") or 0
+                st.markdown(f"""
+                <div style='background:#fff;border:1px solid #e3eaf2;border-left:3px solid #0ea5e9;border-radius:10px;padding:9px 13px;margin:4px 0;'>
+                    <div style='color:#1a2b42;font-weight:700;font-size:0.84rem;'>🌊 {f['province']}</div>
+                    <div style='color:#5a6e88;font-size:0.74rem;margin-top:2px;'>ใกล้ {f['near_station']} ({f['near_line']})</div>
+                    <div style='color:#90a2bb;font-size:0.72rem;'>ระยะ {f['dist']:.0f} กม. {("· "+format(area,',.0f')+" ไร่") if area else ""}</div>
+                </div>""", unsafe_allow_html=True)
+        elif flood_prov_match:
+            st.markdown("<div style='color:#5a6e88;font-size:0.84rem;margin-bottom:6px;'>จังหวัดที่มีน้ำท่วมและมีเส้นทางรถไฟผ่าน:</div>", unsafe_allow_html=True)
+            for prov in sorted(flood_prov_match):
+                st.markdown(f"<div style='background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:7px 12px;margin:3px 0;color:#1d4ed8;font-weight:600;font-size:0.82rem;'>🌊 {prov}</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style='background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:16px;text-align:center;'>
+                <div style='font-size:1.8rem;'>✅</div>
+                <div style='color:#059669;font-weight:700;margin-top:6px;'>ไม่พบพื้นที่น้ำท่วมใกล้เส้นทางรถไฟ</div>
+                <div style='color:#5a6e88;font-size:0.78rem;margin-top:3px;'>ข้อมูลจากดาวเทียม GISTDA</div>
+            </div>""", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.caption("ℹ️ ข้อมูลพื้นที่น้ำท่วมจากดาวเทียม GISTDA (sphere.gistda.or.th) · อัพเดตตามรอบบินดาวเทียม · บูรณาการแสดงผลร่วมกับโครงข่ายรถไฟ รฟท.")
 
 # ╔═══════════════════════════════════════════════════════════╗
 # ║  TAB: PER LINE                                            ║
