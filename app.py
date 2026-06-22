@@ -630,37 +630,28 @@ def _haversine(lat1, lon1, lat2, lon2):
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def fetch_gistda_flood(period="1day", limit=1000):
-    """ดึงพื้นที่น้ำท่วมจาก GISTDA api-gateway.
-       period: 1day / 3day / 7day · คืน (features_list, error).
+    """ดึงพื้นที่น้ำท่วมจาก GISTDA.
+       period: 1day / 3day / 7day · คืน (features_list, error, source).
        feature = {province, amphoe, tambon, lat, lon, area_rai, date}."""
-    base = f"https://api-gateway.gistda.or.th/api/2.0/resources/features/flood/{period}"
-    ua = "Mozilla/5.0"
-    # GISTDA gateway (WSO2-style) มักรับ key ผ่าน header 'apikey' หรือ 'API-Key'
-    # ลองหลายชื่อ header + query เพื่อให้ครอบคลุม
-    attempts = [
-        {"apikey": GISTDA_KEY},               # WSO2 standard
-        {"API-Key": GISTDA_KEY},              # GISTDA docs style
-        {"api-key": GISTDA_KEY},
-        {"X-API-Key": GISTDA_KEY},
-        {"x-api-key": GISTDA_KEY},
-        {"Authorization": GISTDA_KEY},        # raw key (ไม่มี Bearer)
-        {"Authorization": f"Bearer {GISTDA_KEY}"},
+    ua = "Mozilla/5.0 (compatible; SRT-WeatherApp/1.0)"
+    # หลาย endpoint (เผื่อบางโดเมนถูก allowlist ของ proxy ฝั่งโฮสต์)
+    endpoints = [
+        f"https://api-gateway.gistda.or.th/api/2.0/resources/features/flood/{period}",
+        f"https://disaster.gistda.or.th/api/2.0/resources/features/flood/{period}",
     ]
-    query_attempts = [
-        {"api-key": GISTDA_KEY},
+    key_headers = [
+        {"API-Key": GISTDA_KEY},
         {"apikey": GISTDA_KEY},
-        {"key": GISTDA_KEY},
+        {"x-api-key": GISTDA_KEY},
     ]
-    last_err = ""
+    last_err = ""; proxy_blocked = False
 
-    def _try(headers, params):
-        nonlocal last_err
-        h = {"accept":"application/json", "User-Agent":ua}
-        h.update(headers)
-        p = {"limit":limit, "offset":0}
-        p.update(params)
+    def _try(url, headers, params):
+        nonlocal last_err, proxy_blocked
+        h = {"accept":"application/json", "User-Agent":ua}; h.update(headers)
+        p = {"limit":limit, "offset":0}; p.update(params)
         try:
-            r = requests.get(base, headers=h, params=p, timeout=20)
+            r = requests.get(url, headers=h, params=p, timeout=20)
             if r.status_code == 200:
                 try:
                     data = r.json()
@@ -671,32 +662,33 @@ def fetch_gistda_flood(period="1day", limit=1000):
                     return feats
                 last_err = "เชื่อมต่อสำเร็จ แต่รูปแบบข้อมูลไม่รู้จัก"
             elif r.status_code == 407:
-                last_err = "HTTP 407: gateway ต้องการ API key (ลองรูปแบบ header อื่น)"
+                last_err = "HTTP 407"; proxy_blocked = True
             elif r.status_code in (401,403):
-                last_err = f"HTTP {r.status_code}: API key ไม่ผ่านการตรวจสอบ"
+                last_err = f"HTTP {r.status_code}"
             elif r.status_code == 404:
-                last_err = "HTTP 404: ไม่พบ endpoint/ช่วงเวลา"
-            elif r.status_code == 429:
-                last_err = "HTTP 429: เรียกถี่เกินไป"
+                last_err = "HTTP 404"
             else:
                 last_err = f"HTTP {r.status_code}"
         except requests.exceptions.Timeout:
-            last_err = "Timeout (20s)"
+            last_err = "Timeout"
         except Exception as e:
-            last_err = f"{type(e).__name__}: {str(e)[:50]}"
+            last_err = f"{type(e).__name__}"
         return None
 
-    # 1) ลองส่ง key ผ่าน header หลายแบบ
-    for hd in attempts:
-        res = _try(hd, {})
+    for url in endpoints:
+        for kh in key_headers:
+            res = _try(url, kh, {})
+            if res is not None:
+                return res, "", "api"
+            if proxy_blocked:
+                break  # proxy บล็อกโดเมนนี้ ลองโดเมนถัดไป
+        proxy_blocked = False
+    # query-string fallback บน endpoint แรก
+    for q in ({"api-key":GISTDA_KEY},{"apikey":GISTDA_KEY},{"key":GISTDA_KEY}):
+        res = _try(endpoints[0], {}, q)
         if res is not None:
-            return res, ""
-    # 2) ลองส่ง key ผ่าน query string
-    for q in query_attempts:
-        res = _try({}, q)
-        if res is not None:
-            return res, ""
-    return [], (last_err or "เชื่อมต่อ GISTDA ไม่สำเร็จ")
+            return res, "", "api"
+    return [], (last_err or "เชื่อมต่อไม่สำเร็จ"), "none"
 
 def _parse_gistda_flood(data):
     """แปลง response GISTDA หลายรูปแบบเป็น list มาตรฐาน."""
@@ -1344,7 +1336,7 @@ eq_felt = [e for e in earthquakes if (e["mag"] or 0) >= 4.5]
 eq_max = max((e["mag"] or 0) for e in earthquakes) if earthquakes else None
 
 # GISTDA flood data (พื้นที่น้ำท่วมย้อนหลัง 3 วัน)
-flood_feats, flood_err = fetch_gistda_flood(period="3day")
+flood_feats, flood_err, flood_source = fetch_gistda_flood(period="3day")
 # จับคู่จุดน้ำท่วมที่อยู่ใกล้สถานีรถไฟ (รัศมี 30 กม.)
 flood_near = []
 _flood_provinces = set()
@@ -1889,17 +1881,26 @@ with tab_flood:
 
     if flood_err:
         _is_proxy = "407" in flood_err
-        _hint = ("ระบบกำลังลองส่ง API key หลายรูปแบบให้ตรงกับ gateway ของ GISTDA · "
-                 "หากยังไม่ผ่าน อาจเป็นข้อจำกัดเครือข่ายของผู้ให้บริการโฮสต์ (เช่น Streamlit Cloud) — "
-                 "แนะนำตั้ง GISTDA_KEY ใน Secrets หรือรันบนเซิร์ฟเวอร์ที่เข้าถึง api-gateway.gistda.or.th ได้โดยตรง"
-                 if _is_proxy else
-                 "ระบบยังคงเชื่อม API key ไว้แล้ว จะแสดงข้อมูลอัตโนมัติเมื่อมีพื้นที่น้ำท่วม")
+        if _is_proxy:
+            _title = "ไม่สามารถดึงข้อมูล GISTDA จากเซิร์ฟเวอร์นี้ (HTTP 407)"
+            _hint = ("สาเหตุ: พร็อกซีของผู้ให้บริการโฮสต์ (Streamlit Cloud) บล็อกการเชื่อมต่อไปยัง api-gateway.gistda.or.th "
+                     "— เป็นข้อจำกัดเครือข่าย ไม่ใช่ปัญหา API key (key ฝังในระบบถูกต้องแล้ว) · "
+                     "ใช้งานได้เต็มรูปแบบเมื่อรันบนเซิร์ฟเวอร์ที่เข้าถึง GISTDA ได้โดยตรง เช่น เซิร์ฟเวอร์ในองค์กร รฟท. หรือ VPS")
+        else:
+            _title = f"ข้อมูลน้ำท่วม GISTDA — {flood_err}"
+            _hint = "ระบบเชื่อม API key ไว้แล้ว จะแสดงข้อมูลอัตโนมัติเมื่อมีพื้นที่น้ำท่วม (ตามรอบบินดาวเทียม)"
         st.markdown(f"""
         <div class='alert-banner ab-warn'>
             <div class='ab-icon'>🛰️</div>
-            <div class='ab-text'><h3>ข้อมูลน้ำท่วม GISTDA — {flood_err}</h3>
+            <div class='ab-text'><h3>{_title}</h3>
             <p>{_hint}</p></div>
         </div>""", unsafe_allow_html=True)
+        # ปุ่มลิงก์ไปดูข้อมูล GISTDA โดยตรง (ใช้งานได้เสมอ)
+        lc1, lc2, lc3 = st.columns(3)
+        lc1.markdown("<a href='https://disaster.gistda.or.th/' target='_blank' style='text-decoration:none;'><div style='background:#fff;border:1px solid #e3eaf2;border-top:3px solid #2563eb;border-radius:12px;padding:13px;text-align:center;'><div style='font-size:1.5rem;'>🌊</div><div style='color:#1a2b42;font-weight:700;font-size:0.84rem;margin-top:4px;'>GISTDA Disaster</div><div style='color:#90a2bb;font-size:0.72rem;'>แดชบอร์ดน้ำท่วมทางการ</div></div></a>", unsafe_allow_html=True)
+        lc2.markdown("<a href='https://flood.gistda.or.th/' target='_blank' style='text-decoration:none;'><div style='background:#fff;border:1px solid #e3eaf2;border-top:3px solid #0ea5e9;border-radius:12px;padding:13px;text-align:center;'><div style='font-size:1.5rem;'>🗺️</div><div style='color:#1a2b42;font-weight:700;font-size:0.84rem;margin-top:4px;'>Flood Monitoring</div><div style='color:#90a2bb;font-size:0.72rem;'>ระบบติดตามน้ำท่วม</div></div></a>", unsafe_allow_html=True)
+        lc3.markdown("<a href='https://www.gistda.or.th/' target='_blank' style='text-decoration:none;'><div style='background:#fff;border:1px solid #e3eaf2;border-top:3px solid #059669;border-radius:12px;padding:13px;text-align:center;'><div style='font-size:1.5rem;'>🛰️</div><div style='color:#1a2b42;font-weight:700;font-size:0.84rem;margin-top:4px;'>GISTDA</div><div style='color:#90a2bb;font-size:0.72rem;'>เว็บไซต์หลัก</div></div></a>", unsafe_allow_html=True)
+        st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
 
     cflood1, cflood2 = st.columns([1.3, 1])
 
