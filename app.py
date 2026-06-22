@@ -780,6 +780,8 @@ def fetch_gistda_flood(period="3day", limit=1000):
             {"Authorization": f"Bearer {GISTDA_KEY}"},
         ]
         query_sets = [
+            # GISTDA Open API ใช้ api_key ใน URL ตามเอกสาร/response links
+            {"api_key": GISTDA_KEY, "limit": limit, "offset": 0},
             {"limit": limit, "offset": 0},
             {"api-key": GISTDA_KEY, "limit": limit, "offset": 0},
             {"apikey": GISTDA_KEY, "limit": limit, "offset": 0},
@@ -822,6 +824,64 @@ def fetch_gistda_flood(period="3day", limit=1000):
             "ให้ตั้ง GISTDA_PROXY_URL หรือเพิ่มไฟล์ data/gistda_flood_cache.geojson"
         ), "none"
     return [], (last_err or "เชื่อมต่อ GISTDA ไม่สำเร็จ"), "none"
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_gistda_flood_auto(limit=1000):
+    """ดึงข้อมูล GISTDA แบบอัตโนมัติ 1day → 3day → 7day
+
+    จุดประสงค์:
+      1) ถ้า 1day ตอบ features=[] ให้ลอง 3day และ 7day ต่อ
+      2) ถ้าเชื่อมต่อสำเร็จแต่ไม่มีข้อมูล ให้ถือว่าไม่ใช่ error
+      3) ถ้า Streamlit Cloud ติด HTTP 407 ให้ยัง fallback ไป proxy/cache ตาม fetch_gistda_flood()
+
+    คืนค่า: (features_list, error_message, source, period)
+      source = api / proxy / cache / none
+      period = 1day / 3day / 7day
+    """
+    periods = ("1day", "3day", "7day")
+    last_err = ""
+    last_source = "none"
+    connected_source = ""
+    connected_period = "7day"
+    connected_cache_msg = ""
+
+    for period in periods:
+        feats, err, source = fetch_gistda_flood(period=period, limit=limit)
+        last_source = source or "none"
+
+        # เรียกสำเร็จผ่าน API/Proxy/Cache
+        if source in ("api", "proxy", "cache"):
+            connected_source = source
+            connected_period = period
+            if source == "cache" and err:
+                connected_cache_msg = err
+
+            # พบข้อมูลจริง ให้หยุดทันที
+            if feats and len(feats) > 0:
+                return feats, err if source == "cache" else "", source, period
+
+            # เชื่อมต่อสำเร็จ แต่ features=[] — ไม่ใช่ error
+            # ลองช่วงเวลาที่กว้างขึ้นต่อ
+            last_err = ""
+            continue
+
+        # Error จริง
+        if err:
+            last_err = err
+
+        # ถ้าเป็น 407 มักเป็นระดับ network/host ลองช่วงอื่นก็จะโดนซ้ำ
+        # fetch_gistda_flood() ได้ลอง cache ให้แล้ว จึงหยุดเพื่อไม่ให้รอนาน
+        if "407" in (err or ""):
+            break
+
+    # เชื่อมต่อสำเร็จแล้ว แต่ทุกช่วง 1/3/7 วันไม่มี feature
+    if connected_source:
+        return [], connected_cache_msg, connected_source, connected_period
+
+    # เชื่อมต่อไม่สำเร็จ
+    return [], (last_err or "ไม่สามารถเชื่อมต่อข้อมูล GISTDA ได้"), last_source, "7day"
+
 
 def _parse_gistda_flood(data):
     """แปลง response GISTDA หลายรูปแบบเป็น list มาตรฐาน."""
@@ -1468,8 +1528,15 @@ earthquakes = parse_earthquakes(eq_data)
 eq_felt = [e for e in earthquakes if (e["mag"] or 0) >= 4.5]
 eq_max = max((e["mag"] or 0) for e in earthquakes) if earthquakes else None
 
-# GISTDA flood data (พื้นที่น้ำท่วมย้อนหลัง 3 วัน)
-flood_feats, flood_err, flood_source = fetch_gistda_flood(period="3day")
+# GISTDA flood data
+# ดึงแบบอัตโนมัติ: 1day → 3day → 7day
+# ถ้า GISTDA ตอบ features=[] จะถือว่าเชื่อมต่อสำเร็จ แต่ไม่มีพื้นที่น้ำท่วมในช่วงนั้น
+flood_feats, flood_err, flood_source, flood_period = fetch_gistda_flood_auto(limit=1000)
+flood_period_label = {
+    "1day": "ย้อนหลัง 1 วัน",
+    "3day": "ย้อนหลัง 3 วัน",
+    "7day": "ย้อนหลัง 7 วัน",
+}.get(flood_period, str(flood_period))
 # จับคู่จุดน้ำท่วมที่อยู่ใกล้สถานีรถไฟ (รัศมี 30 กม.)
 flood_near = []
 _flood_provinces = set()
@@ -2002,7 +2069,7 @@ with tab_flood:
     fk = st.columns(4)
     _tot_area = sum(f.get("area_rai") or 0 for f in flood_feats)
     fk[0].markdown(f"""<div class='kpi c-info'><div class='kpi-top'><span class='kpi-ico'>🌊</span><span class='kpi-tag'>ทั้งหมด</span></div>
-        <div class='kpi-val'>{len(flood_feats)}</div><div class='kpi-lab'>พื้นที่น้ำท่วม</div><div class='kpi-foot'>จากดาวเทียม GISTDA</div></div>""", unsafe_allow_html=True)
+        <div class='kpi-val'>{len(flood_feats)}</div><div class='kpi-lab'>พื้นที่น้ำท่วม</div><div class='kpi-foot'>GISTDA · {flood_period_label}</div></div>""", unsafe_allow_html=True)
     fk[1].markdown(f"""<div class='kpi c-crit'><div class='kpi-top'><span class='kpi-ico'>🚧</span><span class='kpi-tag'>ใกล้ทาง</span></div>
         <div class='kpi-val'>{len(flood_near)}</div><div class='kpi-lab'>จุดใกล้ทางรถไฟ</div><div class='kpi-foot'>รัศมี 30 กม.</div></div>""", unsafe_allow_html=True)
     fk[2].markdown(f"""<div class='kpi c-warn'><div class='kpi-top'><span class='kpi-ico'>🏞️</span><span class='kpi-tag'>พื้นที่</span></div>
@@ -2015,18 +2082,33 @@ with tab_flood:
     # แสดงสถานะแหล่งข้อมูล GISTDA
     if flood_source in ("api", "proxy") and not flood_err:
         _src_label = "GISTDA API โดยตรง" if flood_source == "api" else "GISTDA ผ่าน Proxy"
+        if len(flood_feats) > 0:
+            _title = "เชื่อมต่อข้อมูลน้ำท่วม GISTDA สำเร็จ"
+            _hint = f"แหล่งข้อมูล: {_src_label} · พบข้อมูล {len(flood_feats):,} รายการ · ช่วงข้อมูล {flood_period_label}"
+        else:
+            _title = "เชื่อมต่อ GISTDA สำเร็จ แต่ไม่พบพื้นที่น้ำท่วม"
+            _hint = (
+                f"แหล่งข้อมูล: {_src_label} · ตรวจสอบครบช่วง 1 วัน / 3 วัน / 7 วันแล้ว "
+                "API ตอบกลับปกติ แต่ numberReturned = 0 จึงไม่มี polygon/จุดน้ำท่วมให้แสดง"
+            )
         st.markdown(f"""
         <div class='alert-banner ab-ok'>
             <div class='ab-icon'>🛰️</div>
-            <div class='ab-text'><h3>เชื่อมต่อข้อมูลน้ำท่วมสำเร็จ</h3>
-            <p>แหล่งข้อมูล: {_src_label} · พบข้อมูล {len(flood_feats)} รายการ</p></div>
+            <div class='ab-text'><h3>{_title}</h3>
+            <p>{_hint}</p></div>
         </div>""", unsafe_allow_html=True)
-    elif flood_source == "cache" and flood_feats:
+    elif flood_source == "cache":
+        if len(flood_feats) > 0:
+            _title = "แสดงข้อมูล GISTDA จาก Cache สำรอง"
+            _hint = f"{flood_err} · พบข้อมูล {len(flood_feats):,} รายการ · ช่วงข้อมูล {flood_period_label}"
+        else:
+            _title = "โหลด Cache สำเร็จ แต่ไม่พบพื้นที่น้ำท่วม"
+            _hint = flood_err or "ไฟล์สำรองมี features=[] จึงไม่มีข้อมูลให้แสดงบนแผนที่"
         st.markdown(f"""
         <div class='alert-banner ab-warn'>
             <div class='ab-icon'>🗂️</div>
-            <div class='ab-text'><h3>แสดงข้อมูล GISTDA จาก Cache สำรอง</h3>
-            <p>{flood_err}</p></div>
+            <div class='ab-text'><h3>{_title}</h3>
+            <p>{_hint}</p></div>
         </div>""", unsafe_allow_html=True)
     elif flood_err:
         _is_proxy = "407" in flood_err
