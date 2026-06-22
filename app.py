@@ -615,46 +615,61 @@ def _haversine(lat1, lon1, lat2, lon2):
     return 2*R*math.asin(math.sqrt(a))
 
 @st.cache_data(ttl=1800, show_spinner=False)
-def fetch_gistda_flood():
-    """ดึงพื้นที่น้ำท่วมจาก GISTDA sphere API (พยายามหลาย endpoint, ทนต่อ schema ที่ต่างกัน).
-       คืน (features_list, error). แต่ละ feature = {province, lat, lon, area_rai, date}."""
-    base_candidates = [
-        # sphere disaster flood (จังหวัดที่มีน้ำท่วม)
-        ("https://sphere.gistda.or.th/api/1.0/disaster/flood/now", {"key":GISTDA_KEY}),
-        ("https://sphere.gistda.or.th/api/disaster/flood", {"key":GISTDA_KEY}),
-        ("https://disaster.gistda.or.th/api/flood/latest", {"key":GISTDA_KEY}),
+def fetch_gistda_flood(period="1day", limit=1000):
+    """ดึงพื้นที่น้ำท่วมจาก GISTDA api-gateway.
+       period: 1day / 3day / 7day · คืน (features_list, error).
+       feature = {province, amphoe, tambon, lat, lon, area_rai, date}."""
+    base = f"https://api-gateway.gistda.or.th/api/2.0/resources/features/flood/{period}"
+    # API key — GISTDA api-gateway รับผ่าน header 'API-Key' เป็นหลัก, สำรองด้วย query/อื่นๆ
+    attempts = [
+        {"headers":{"accept":"application/json","API-Key":GISTDA_KEY}, "params":{"limit":limit,"offset":0}},
+        {"headers":{"accept":"application/json","api-key":GISTDA_KEY}, "params":{"limit":limit,"offset":0}},
+        {"headers":{"accept":"application/json","x-api-key":GISTDA_KEY}, "params":{"limit":limit,"offset":0}},
+        {"headers":{"accept":"application/json","Authorization":f"Bearer {GISTDA_KEY}"}, "params":{"limit":limit,"offset":0}},
+        {"headers":{"accept":"application/json"}, "params":{"limit":limit,"offset":0,"api-key":GISTDA_KEY}},
+        {"headers":{"accept":"application/json"}, "params":{"limit":limit,"offset":0,"api_key":GISTDA_KEY}},
+        {"headers":{"accept":"application/json"}, "params":{"limit":limit,"offset":0,"key":GISTDA_KEY}},
     ]
-    for url, params in base_candidates:
+    last_err = ""
+    for a in attempts:
         try:
-            r = requests.get(url, params=params, timeout=12,
-                             headers={"accept":"application/json"})
+            r = requests.get(base, headers=a["headers"], params=a["params"], timeout=20)
             if r.status_code == 200:
                 try:
                     data = r.json()
                 except Exception:
-                    continue
+                    last_err = "200 แต่ไม่ใช่ JSON"; continue
                 feats = _parse_gistda_flood(data)
                 if feats is not None:
                     return feats, ""
+                last_err = "เชื่อมต่อสำเร็จ แต่รูปแบบข้อมูลไม่รู้จัก"
             elif r.status_code in (401,403):
-                return [], f"GISTDA HTTP {r.status_code}: API key ไม่ถูกต้อง/ไม่มีสิทธิ์"
-        except Exception:
-            continue
-    return [], "ไม่สามารถเชื่อมต่อ GISTDA API (อาจปิดชั่วคราว/นอกฤดูน้ำท่วม)"
+                last_err = f"HTTP {r.status_code}: API key ไม่ผ่านการตรวจสอบ"
+            elif r.status_code == 404:
+                last_err = "HTTP 404: ไม่พบ endpoint/ช่วงเวลา"
+            elif r.status_code == 429:
+                last_err = "HTTP 429: เรียกถี่เกินไป"
+            else:
+                last_err = f"HTTP {r.status_code}"
+        except requests.exceptions.Timeout:
+            last_err = "Timeout (20s)"
+        except Exception as e:
+            last_err = f"{type(e).__name__}: {str(e)[:50]}"
+    return [], (last_err or "เชื่อมต่อ GISTDA ไม่สำเร็จ")
 
 def _parse_gistda_flood(data):
     """แปลง response GISTDA หลายรูปแบบเป็น list มาตรฐาน."""
     if data is None: return None
     rows = []
     # GeoJSON FeatureCollection
-    if isinstance(data, dict) and data.get("type") == "FeatureCollection":
+    if isinstance(data, dict) and (data.get("type") == "FeatureCollection" or "features" in data):
         for f in data.get("features", []):
+            if not isinstance(f, dict): continue
             p = f.get("properties", {}) or {}
             g = f.get("geometry", {}) or {}
             c = g.get("coordinates")
             lat=lon=None
             if isinstance(c, list) and c:
-                # point or polygon centroid
                 if isinstance(c[0],(int,float)) and len(c)>=2:
                     lon, lat = c[0], c[1]
                 else:
@@ -670,24 +685,28 @@ def _parse_gistda_flood(data):
                             lon=sum(p2[0] for p2 in flat)/len(flat)
                             lat=sum(p2[1] for p2 in flat)/len(flat)
                     except Exception: pass
-            rows.append({"province":_scalar(_pick(p,"province","prov_name","CHANGWAT","name")) or "—",
+            rows.append({"province":_scalar(_pick(p,"prov_th","province","prov_name","pv_tn","CHANGWAT","changwat","name")) or "—",
+                         "amphoe":_scalar(_pick(p,"amp_th","amphoe","amp_name","ap_tn")) or "",
+                         "tambon":_scalar(_pick(p,"tam_th","tambon","tam_name","tb_tn")) or "",
                          "lat":lat,"lon":lon,
-                         "area_rai":_to_float(_pick(p,"area_rai","area","flood_area","rai")),
-                         "date":_scalar(_pick(p,"date","flood_date","update","datetime")) or ""})
+                         "area_rai":_to_float(_pick(p,"area_rai","flood_rai","area","flood_area","rai","m_rai")),
+                         "date":_scalar(_pick(p,"flood_date","date","f_date","update","datetime","acq_date")) or ""})
         return rows
     # plain list of records
     if isinstance(data, list):
         for p in data:
             if not isinstance(p, dict): continue
-            rows.append({"province":_scalar(_pick(p,"province","prov_name","name")) or "—",
+            rows.append({"province":_scalar(_pick(p,"prov_th","province","prov_name","pv_tn","name")) or "—",
+                         "amphoe":_scalar(_pick(p,"amp_th","amphoe","ap_tn")) or "",
+                         "tambon":_scalar(_pick(p,"tam_th","tambon","tb_tn")) or "",
                          "lat":_to_float(_pick(p,"lat","latitude","y")),
                          "lon":_to_float(_pick(p,"lon","lng","longitude","x")),
-                         "area_rai":_to_float(_pick(p,"area_rai","area","rai")),
-                         "date":_scalar(_pick(p,"date","flood_date","update")) or ""})
+                         "area_rai":_to_float(_pick(p,"area_rai","flood_rai","area","rai")),
+                         "date":_scalar(_pick(p,"flood_date","date","f_date","update")) or ""})
         return rows
     # dict wrapping a list
     if isinstance(data, dict):
-        for key in ("data","results","features","items","flood"):
+        for key in ("data","results","features","items","flood","value"):
             if key in data and isinstance(data[key], list):
                 return _parse_gistda_flood(data[key])
     return None
@@ -1283,8 +1302,8 @@ earthquakes = parse_earthquakes(eq_data)
 eq_felt = [e for e in earthquakes if (e["mag"] or 0) >= 4.5]
 eq_max = max((e["mag"] or 0) for e in earthquakes) if earthquakes else None
 
-# GISTDA flood data
-flood_feats, flood_err = fetch_gistda_flood()
+# GISTDA flood data (พื้นที่น้ำท่วมย้อนหลัง 3 วัน)
+flood_feats, flood_err = fetch_gistda_flood(period="3day")
 # จับคู่จุดน้ำท่วมที่อยู่ใกล้สถานีรถไฟ (รัศมี 30 กม.)
 flood_near = []
 _flood_provinces = set()
@@ -1879,9 +1898,12 @@ with tab_flood:
         if flood_near:
             for f in sorted(flood_near, key=lambda x:x["dist"])[:12]:
                 area = f.get("area_rai") or 0
+                loc_detail = " · ".join(x for x in [f.get("amphoe",""), f.get("tambon","")] if x)
+                loc_line = f"<div style='color:#90a2bb;font-size:0.7rem;'>{loc_detail}</div>" if loc_detail else ""
                 st.markdown(f"""
                 <div style='background:#fff;border:1px solid #e3eaf2;border-left:3px solid #0ea5e9;border-radius:10px;padding:9px 13px;margin:4px 0;'>
                     <div style='color:#1a2b42;font-weight:700;font-size:0.84rem;'>🌊 {f['province']}</div>
+                    {loc_line}
                     <div style='color:#5a6e88;font-size:0.74rem;margin-top:2px;'>ใกล้ {f['near_station']} ({f['near_line']})</div>
                     <div style='color:#90a2bb;font-size:0.72rem;'>ระยะ {f['dist']:.0f} กม. {("· "+format(area,',.0f')+" ไร่") if area else ""}</div>
                 </div>""", unsafe_allow_html=True)
