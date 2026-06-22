@@ -1057,6 +1057,7 @@ def build_executive_image(meta, kpis, top_risks, severe_list, day_summary, fmt="
     return buf.getvalue()
 
 
+with st.sidebar:
     st.markdown("""
     <div style='text-align:center;padding:10px 0 16px;'>
         <div style='font-size:2.6rem;'>🚆</div>
@@ -1321,6 +1322,69 @@ tab_dash, tab_rain, tab_7day, tab_map, tab_lines, tab_quake, tab_detail = st.tab
 # ║  TAB: EXECUTIVE OVERVIEW                                  ║
 # ╚═══════════════════════════════════════════════════════════╝
 with tab_dash:
+    # — ปุ่มดาวน์โหลดรายงานสรุปผู้บริหาร (PNG / JPG) —
+    rc1, rc2, rc3 = st.columns([1, 1, 3.4])
+    # assemble report data
+    _verdict = {}
+    if n_crit>0:   _verdict = {"title":"🚨 ระดับวิกฤต","detail":"ควรพิจารณามาตรการชะลอ/งดเดินรถบางช่วง","color":"#dc2626"}
+    elif n_heavy>0:_verdict = {"title":"⚠️ ต้องเฝ้าระวัง","detail":"ติดตามใกล้ชิดและเตรียมความพร้อม","color":"#e8820c"}
+    elif n_med>0:  _verdict = {"title":"ℹ️ ปกติ-เฝ้าระวัง","detail":"มีฝนปานกลางบางจุด","color":"#2563eb"}
+    elif n_ok>0:   _verdict = {"title":"✅ ปลอดภัย","detail":"เดินรถได้ตามปกติทุกสาย","color":"#059669"}
+    else:          _verdict = {"title":"— ไม่มีข้อมูล","detail":"รอเชื่อมต่อข้อมูล","color":"#90a2bb"}
+    _meta = {"datetime":th_datetime(NOW_TH), "line":sel_line, "day":sel_day, "verdict":_verdict}
+    _kpis = [
+        ("ฝนสูงสุด", f"{max_rain:.0f}" if max_rain is not None else "—", "มม.", "#0ea5e9"),
+        ("ฝนเฉลี่ย", f"{avg_rain:.1f}" if avg_rain is not None else "—", "มม.", "#2563eb"),
+        ("ฝนหนักมาก", str(n_crit), "สถานี", "#dc2626"),
+        ("ฝนหนัก", str(n_heavy), "สถานี", "#e8820c"),
+        ("อุณหภูมิเฉลี่ย", f"{avg_temp:.0f}" if avg_temp is not None else "—", "°C", "#c79a2e"),
+        ("ครอบคลุม", str(n_fetched), "สถานี", "#059669"),
+    ]
+    _top = sorted([s for s in station_data if s["rain"] is not None], key=lambda x:x["rain"], reverse=True)[:7]
+    _top_risks = [(s["name"], s["province"], s["line"], s["rain"], rain_risk(s["rain"])[1], rain_risk(s["rain"])[3]) for s in _top]
+    _severe = []
+    for s in station_data:
+        r=s.get("rain"); w=s.get("ws")
+        if r is not None and r>=90: _severe.append((s["name"],s["province"],f"ฝนหนักมาก {r:.0f}มม.","#dc2626"))
+        elif r is not None and r>=35: _severe.append((s["name"],s["province"],f"ฝนหนัก {r:.0f}มม.","#e8820c"))
+        elif w is not None and w>=10: _severe.append((s["name"],s["province"],f"ลมแรง {w:.0f}m/s","#7c3aed"))
+    _day_sum = []
+    _labels7 = ["วันนี้","พรุ่งฯ","มะรืน","+3","+4","+5","+6"]
+    for di in range(7):
+        dr=[s["series"][di]["rain"] for s in station_data if di<len(s.get("series",[])) and s["series"][di].get("rain") is not None]
+        mx = max(dr) if dr else 0
+        _day_sum.append({"label":_labels7[di],"max":mx,"hex":rain_hex(mx)})
+
+    @st.cache_data(ttl=300, show_spinner=False)
+    def _gen_report(fmt, _bucket):
+        try:
+            return build_executive_image(_meta,_kpis,_top_risks,_severe,_day_sum,fmt=fmt)
+        except Exception as e:
+            return None
+
+    with rc1:
+        try:
+            png = _gen_report("png", bucket)
+            if png:
+                st.download_button("📥 ดาวน์โหลด PNG", data=png,
+                    file_name=f"รายงานสภาพอากาศ_{NOW_TH.strftime('%Y%m%d_%H%M')}.png",
+                    mime="image/png", use_container_width=True)
+        except Exception:
+            st.caption("PNG ไม่พร้อม")
+    with rc2:
+        try:
+            jpg = _gen_report("jpg", bucket)
+            if jpg:
+                st.download_button("📥 ดาวน์โหลด JPG", data=jpg,
+                    file_name=f"รายงานสภาพอากาศ_{NOW_TH.strftime('%Y%m%d_%H%M')}.jpg",
+                    mime="image/jpeg", use_container_width=True)
+        except Exception:
+            st.caption("JPG ไม่พร้อม")
+    with rc3:
+        st.markdown("<div style='color:#90a2bb;font-size:0.78rem;padding-top:8px;'>📄 ดาวน์โหลดรายงานสรุปผู้บริหารเป็นไฟล์ภาพ พร้อมส่งต่อหรือนำเสนอ</div>", unsafe_allow_html=True)
+
+    st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+
     c1, c2 = st.columns([1.15, 1])
 
     # — Risk distribution donut-like + line summary —
