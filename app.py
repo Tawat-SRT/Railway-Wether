@@ -705,10 +705,10 @@ def assess_7day(series):
             peak_rain = r; peak = lv; peak_idx = i
     labels = ["วันนี้","พรุ่งนี้","มะรืน","อีก 3 วัน","อีก 4 วัน","อีก 5 วัน","อีก 6 วัน"]
     peak_label = labels[peak_idx] if peak_idx < len(labels) else f"+{peak_idx}"
-    if peak >= 4:   advice = "เสี่ยงสูงมาก — เตรียมแผนชะลอ/งดเดินรถ"
-    elif peak >= 3: advice = "เสี่ยงสูง — เฝ้าระวังและเตรียมความพร้อม"
+    if peak >= 4:   advice = "เสี่ยงสูงมาก — เฝ้าระวังเป็นพิเศษ"
+    elif peak >= 3: advice = "เสี่ยงสูง — เฝ้าระวัง"
     elif peak >= 2: advice = "เสี่ยงปานกลาง — ติดตามสถานการณ์"
-    else:           advice = "เสี่ยงต่ำ — เดินรถปกติ"
+    else:           advice = "เสี่ยงต่ำ — ปกติ"
     return (peak, peak_label, peak_rain, n_risk, advice)
 
 # ══════════════════════════════════════════════════════════════
@@ -1239,14 +1239,14 @@ else:
         <div class='alert-banner ab-crit'>
             <div class='ab-icon'>🚨</div>
             <div class='ab-text'><h3>เตือนภัยระดับวิกฤต — ฝนหนักมาก {n_crit} สถานี</h3>
-            <p>สถานีเสี่ยง: {crit_names} · แนะนำตรวจสอบทาง/สะพาน และพิจารณาชะลอการเดินรถ</p></div>
+            <p>สถานีเสี่ยง: {crit_names} · แนะนำตรวจสอบทาง/สะพานพิเศษ เฝ้าระวังใกล้ชิด</p></div>
         </div>""", unsafe_allow_html=True)
     elif n_heavy > 0:
         st.markdown(f"""
         <div class='alert-banner ab-warn'>
             <div class='ab-icon'>⚠️</div>
             <div class='ab-text'><h3>เฝ้าระวัง — ฝนหนัก {n_heavy} สถานี</h3>
-            <p>มีฝนตกหนัก 35–90 มม. ในบางช่วงทาง · ติดตามสถานการณ์ใกล้ชิดและเตรียมความพร้อม</p></div>
+            <p>มีฝนตกหนัก 35–90 มม. ในบางช่วงทาง · ติดตามสถานการณ์</p></div>
         </div>""", unsafe_allow_html=True)
     else:
         st.markdown(f"""
@@ -1345,10 +1345,10 @@ with tab_dash:
             </div>""", unsafe_allow_html=True)
 
         # overall verdict
-        if n_crit>0: ov_c,ov_t,ov_d = "#ef4444","🚨 ระดับวิกฤต","ควรพิจารณามาตรการชะลอ/งดเดินรถบางช่วง"
-        elif n_heavy>0: ov_c,ov_t,ov_d = "#f59e0b","⚠️ ต้องเฝ้าระวัง","ติดตามใกล้ชิดและเตรียมความพร้อม"
+        if n_crit>0: ov_c,ov_t,ov_d = "#ef4444","🚨 ระดับวิกฤต","ติดตามใกล้ชิดและเตรียมความพร้อม"
+        elif n_heavy>0: ov_c,ov_t,ov_d = "#f59e0b","⚠️ ต้องเฝ้าระวัง","ติดตามสถานการณ์"
         elif n_med>0: ov_c,ov_t,ov_d = "#3b82f6","ℹ️ ปกติ-เฝ้าระวัง","มีฝนปานกลางบางจุด"
-        elif n_ok>0: ov_c,ov_t,ov_d = "#10b981","✅ ปลอดภัย","เดินรถได้ตามปกติทุกสาย"
+        elif n_ok>0: ov_c,ov_t,ov_d = "#10b981","✅ ปลอดภัย","ปกติ"
         else: ov_c,ov_t,ov_d = "#5f8199","— ไม่มีข้อมูล","รอเชื่อมต่อข้อมูล"
         st.markdown(f"""
         <div style='margin-top:14px;background:#f3f7fc;border:1px solid {ov_c};border-radius:12px;padding:14px 18px;'>
@@ -1501,12 +1501,12 @@ with tab_rain:
 
     # rainfall criteria reference
     st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
-    st.markdown("<div class='panel'><div class='panel-h'>📋 เกณฑ์ปริมาณน้ำฝน (กรมอุตุนิยมวิทยา) และคำแนะนำการเดินรถ</div>", unsafe_allow_html=True)
+    st.markdown("<div class='panel'><div class='panel-h'>📋 เกณฑ์ปริมาณน้ำฝน (กรมอุตุนิยมวิทยา) และคำแนะนำ</div>", unsafe_allow_html=True)
     crit_rows = [
-        ("☀️","ไม่มีฝน / เล็กน้อย","0–10 มม./วัน","#10b981","เดินรถปกติ"),
-        ("🌧️","ฝนปานกลาง","10–35 มม./วัน","#3b82f6","เฝ้าระวัง ตรวจสอบทางตามปกติ"),
-        ("⛈️","ฝนหนัก","35–90 มม./วัน","#f59e0b","ลดความเร็ว ตรวจสอบจุดเสี่ยงน้ำท่วม/ดินสไลด์"),
-        ("🌊","ฝนหนักมาก","> 90 มม./วัน","#ef4444","พิจารณาชะลอ/งดเดินรถ ตรวจสอบสะพานและคันทาง"),
+        ("☀️","ไม่มีฝน / เล็กน้อย","0–10 มม./วัน","#10b981","ปกติ"),
+        ("🌧️","ฝนปานกลาง","10–35 มม./วัน","#3b82f6","ฝนปานกลาง ตรวจสอบทาง"),
+        ("⛈️","ฝนหนัก","35–90 มม./วัน","#f59e0b","ฝนหนัก เฝ้าระวัง ตรวจสอบทาง"),
+        ("🌊","ฝนหนักมาก","> 90 มม./วัน","#ef4444","ฝนหนักมาก เฝ้าระวัง ตรวจสอบสะพานและคันทางพิเศษ"),
     ]
     for em,lab,rng,hx,act in crit_rows:
         st.markdown(f"""
