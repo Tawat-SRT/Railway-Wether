@@ -620,38 +620,44 @@ def fetch_gistda_flood(period="1day", limit=1000):
        period: 1day / 3day / 7day · คืน (features_list, error).
        feature = {province, amphoe, tambon, lat, lon, area_rai, date}."""
     base = f"https://api-gateway.gistda.or.th/api/2.0/resources/features/flood/{period}"
-    # ใช้ session แยก + ปิด proxy ที่ระบบอาจตั้งไว้ (กัน HTTP 407 Proxy Auth จาก proxy ของ host)
-    ua = "Mozilla/5.0 (SRT-WeatherApp) Python-requests"
-    # ส่ง API key ผ่าน header 'API-Key' เป็นหลัก (ตามมาตรฐาน GISTDA api-gateway)
-    # ไม่ใช้ Authorization: Bearer เพราะ proxy บางตัวเข้าใจผิดว่าเป็น proxy credential → 407
+    ua = "Mozilla/5.0"
+    # GISTDA gateway (WSO2-style) มักรับ key ผ่าน header 'apikey' หรือ 'API-Key'
+    # ลองหลายชื่อ header + query เพื่อให้ครอบคลุม
     attempts = [
-        {"headers":{"accept":"application/json","API-Key":GISTDA_KEY,"User-Agent":ua}, "params":{"limit":limit,"offset":0}},
-        {"headers":{"accept":"application/json","api-key":GISTDA_KEY,"User-Agent":ua}, "params":{"limit":limit,"offset":0}},
-        {"headers":{"accept":"application/json","x-api-key":GISTDA_KEY,"User-Agent":ua}, "params":{"limit":limit,"offset":0}},
-        {"headers":{"accept":"application/json","User-Agent":ua}, "params":{"limit":limit,"offset":0,"api-key":GISTDA_KEY}},
-        {"headers":{"accept":"application/json","User-Agent":ua}, "params":{"limit":limit,"offset":0,"key":GISTDA_KEY}},
+        {"apikey": GISTDA_KEY},               # WSO2 standard
+        {"API-Key": GISTDA_KEY},              # GISTDA docs style
+        {"api-key": GISTDA_KEY},
+        {"X-API-Key": GISTDA_KEY},
+        {"x-api-key": GISTDA_KEY},
+        {"Authorization": GISTDA_KEY},        # raw key (ไม่มี Bearer)
+        {"Authorization": f"Bearer {GISTDA_KEY}"},
+    ]
+    query_attempts = [
+        {"api-key": GISTDA_KEY},
+        {"apikey": GISTDA_KEY},
+        {"key": GISTDA_KEY},
     ]
     last_err = ""
-    try:
-        sess = requests.Session()
-        sess.trust_env = False  # ไม่ใช้ proxy จาก environment (แก้ HTTP 407)
-    except Exception:
-        sess = requests
-    for a in attempts:
+
+    def _try(headers, params):
+        nonlocal last_err
+        h = {"accept":"application/json", "User-Agent":ua}
+        h.update(headers)
+        p = {"limit":limit, "offset":0}
+        p.update(params)
         try:
-            r = sess.get(base, headers=a["headers"], params=a["params"], timeout=20,
-                         proxies={"http":None,"https":None})
+            r = requests.get(base, headers=h, params=p, timeout=20)
             if r.status_code == 200:
                 try:
                     data = r.json()
                 except Exception:
-                    last_err = "200 แต่ไม่ใช่ JSON"; continue
+                    last_err = "200 แต่ไม่ใช่ JSON"; return None
                 feats = _parse_gistda_flood(data)
                 if feats is not None:
-                    return feats, ""
+                    return feats
                 last_err = "เชื่อมต่อสำเร็จ แต่รูปแบบข้อมูลไม่รู้จัก"
             elif r.status_code == 407:
-                last_err = "HTTP 407: Proxy ของผู้ให้บริการต้องยืนยันตัวตน (ติดต่อผู้ดูแลระบบ/Streamlit)"
+                last_err = "HTTP 407: gateway ต้องการ API key (ลองรูปแบบ header อื่น)"
             elif r.status_code in (401,403):
                 last_err = f"HTTP {r.status_code}: API key ไม่ผ่านการตรวจสอบ"
             elif r.status_code == 404:
@@ -660,12 +666,22 @@ def fetch_gistda_flood(period="1day", limit=1000):
                 last_err = "HTTP 429: เรียกถี่เกินไป"
             else:
                 last_err = f"HTTP {r.status_code}"
-        except requests.exceptions.ProxyError:
-            last_err = "Proxy error: เครือข่ายผู้ให้บริการบล็อกการเชื่อมต่อ"
         except requests.exceptions.Timeout:
             last_err = "Timeout (20s)"
         except Exception as e:
             last_err = f"{type(e).__name__}: {str(e)[:50]}"
+        return None
+
+    # 1) ลองส่ง key ผ่าน header หลายแบบ
+    for hd in attempts:
+        res = _try(hd, {})
+        if res is not None:
+            return res, ""
+    # 2) ลองส่ง key ผ่าน query string
+    for q in query_attempts:
+        res = _try({}, q)
+        if res is not None:
+            return res, ""
     return [], (last_err or "เชื่อมต่อ GISTDA ไม่สำเร็จ")
 
 def _parse_gistda_flood(data):
@@ -1858,9 +1874,10 @@ with tab_flood:
     st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
 
     if flood_err:
-        _is_proxy = "407" in flood_err or "Proxy" in flood_err or "proxy" in flood_err
-        _hint = ("เป็นข้อจำกัดของเครือข่าย/พร็อกซีฝั่งผู้ให้บริการ (เช่น Streamlit Cloud) ที่กั้นการเชื่อมต่อออกภายนอก — "
-                 "ไม่ใช่ปัญหาที่ API key · แนะนำตั้งค่า GISTDA_KEY ใน Secrets หรือรันบนเซิร์ฟเวอร์ที่เข้าถึง api-gateway.gistda.or.th ได้โดยตรง"
+        _is_proxy = "407" in flood_err
+        _hint = ("ระบบกำลังลองส่ง API key หลายรูปแบบให้ตรงกับ gateway ของ GISTDA · "
+                 "หากยังไม่ผ่าน อาจเป็นข้อจำกัดเครือข่ายของผู้ให้บริการโฮสต์ (เช่น Streamlit Cloud) — "
+                 "แนะนำตั้ง GISTDA_KEY ใน Secrets หรือรันบนเซิร์ฟเวอร์ที่เข้าถึง api-gateway.gistda.or.th ได้โดยตรง"
                  if _is_proxy else
                  "ระบบยังคงเชื่อม API key ไว้แล้ว จะแสดงข้อมูลอัตโนมัติเมื่อมีพื้นที่น้ำท่วม")
         st.markdown(f"""
