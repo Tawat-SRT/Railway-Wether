@@ -1039,10 +1039,10 @@ def assess_7day(series):
             peak_rain = r; peak = lv; peak_idx = i
     labels = ["วันนี้","พรุ่งนี้","มะรืน","อีก 3 วัน","อีก 4 วัน","อีก 5 วัน","อีก 6 วัน"]
     peak_label = labels[peak_idx] if peak_idx < len(labels) else f"+{peak_idx}"
-    if peak >= 4:   advice = "เสี่ยงสูงมาก — เตรียมแผนชะลอ/งดเดินรถ"
-    elif peak >= 3: advice = "เสี่ยงสูง — เฝ้าระวังและเตรียมความพร้อม"
-    elif peak >= 2: advice = "เสี่ยงปานกลาง — ติดตามสถานการณ์"
-    else:           advice = "เสี่ยงต่ำ — เดินรถปกติ"
+    if peak >= 4:   advice = "เสี่ยงสูงมาก — เตรียมความพร้อม ตรวจตรา เฝ้าระวังจุดเสี่ยง ประเมินสถานการณ์"
+    elif peak >= 3: advice = "เสี่ยงสูง — เฝ้าระวัง ติดตามสภาพอากาศ"
+    elif peak >= 2: advice = "เสี่ยงปานกลาง — ติดตามสภาพอากาศ"
+    else:           advice = "เสี่ยงต่ำ — ปกติ"
     return (peak, peak_label, peak_rain, n_risk, advice)
 
 # ══════════════════════════════════════════════════════════════
@@ -1690,10 +1690,10 @@ with tab_dash:
     rc1, rc2, rc3 = st.columns([1, 1, 3.4])
     # assemble report data
     _verdict = {}
-    if n_crit>0:   _verdict = {"title":"🚨 ระดับวิกฤต","detail":"ควรพิจารณามาตรการชะลอ/งดเดินรถบางช่วง","color":"#dc2626"}
-    elif n_heavy>0:_verdict = {"title":"⚠️ ต้องเฝ้าระวัง","detail":"ติดตามใกล้ชิดและเตรียมความพร้อม","color":"#e8820c"}
+    if n_crit>0:   _verdict = {"title":"🚨 ระดับวิกฤต","detail":"ฝนตกหนักมาก เตรียมความพร้อม ตรวจตรา เฝ้าระวังจุดเสี่ยง ประเมินสถานการณ์","color":"#dc2626"}
+    elif n_heavy>0:_verdict = {"title":"⚠️ ต้องเฝ้าระวัง","detail":"ฝนตกหนัก เฝ้าระวัง","color":"#e8820c"}
     elif n_med>0:  _verdict = {"title":"ℹ️ ปกติ-เฝ้าระวัง","detail":"มีฝนปานกลางบางจุด","color":"#2563eb"}
-    elif n_ok>0:   _verdict = {"title":"✅ ปลอดภัย","detail":"เดินรถได้ตามปกติทุกสาย","color":"#059669"}
+    elif n_ok>0:   _verdict = {"title":"✅ ปลอดภัย","detail":"ปกติ","color":"#059669"}
     else:          _verdict = {"title":"— ไม่มีข้อมูล","detail":"รอเชื่อมต่อข้อมูล","color":"#90a2bb"}
     _meta = {"datetime":th_datetime(NOW_TH), "line":sel_line, "day":sel_day, "verdict":_verdict}
     _kpis = [
@@ -1773,8 +1773,8 @@ with tab_dash:
             </div>""", unsafe_allow_html=True)
 
         # overall verdict
-        if n_crit>0: ov_c,ov_t,ov_d = "#ef4444","🚨 ระดับวิกฤต","ควรพิจารณามาตรการชะลอ/งดเดินรถบางช่วง"
-        elif n_heavy>0: ov_c,ov_t,ov_d = "#f59e0b","⚠️ ต้องเฝ้าระวัง","ติดตามใกล้ชิดและเตรียมความพร้อม"
+        if n_crit>0: ov_c,ov_t,ov_d = "#ef4444","🚨 ระดับวิกฤต","เตรียมความพร้อม ตรวจตรา เฝ้าระวังจุดเสี่ยง ประเมินสถานการณ์"
+        elif n_heavy>0: ov_c,ov_t,ov_d = "#f59e0b","⚠️ ต้องเฝ้าระวัง","ติดตามใกล้ชิด"
         elif n_med>0: ov_c,ov_t,ov_d = "#3b82f6","ℹ️ ปกติ-เฝ้าระวัง","มีฝนปานกลางบางจุด"
         elif n_ok>0: ov_c,ov_t,ov_d = "#10b981","✅ ปลอดภัย","เดินรถได้ตามปกติทุกสาย"
         else: ov_c,ov_t,ov_d = "#5f8199","— ไม่มีข้อมูล","รอเชื่อมต่อข้อมูล"
